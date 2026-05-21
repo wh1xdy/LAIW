@@ -44,6 +44,7 @@ META_FILES = {
     "fr":           RAW_DIR / "fr_all.json",
     "ip":           RAW_DIR / "ip_all.json",
     "dir":          RAW_DIR / "dir_all.json",
+    "yttr":         RAW_DIR / "yttr_all.json",
 }
 
 # ─── LOGGING ──────────────────────────────────────────────────────────────────
