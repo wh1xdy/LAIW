@@ -219,6 +219,7 @@ SOURCE_MAP = {
     "fr":          lambda: process_riksdagen("fr",   ["fr"]),
     "ip":          lambda: process_riksdagen("ip",   ["ip"]),
     "dir":         lambda: process_riksdagen("dir",  ["dir"]),
+    "yttr":        lambda: process_riksdagen("yttr", ["yttr"]),
     "eu":          process_eu,
     "domstol":     process_domstol,
     "myndigheter": process_myndigheter,
