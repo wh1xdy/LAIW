@@ -12,11 +12,16 @@ Output:
 Kör: python3 download_myndigheter.py [--source jo|jk|do|di|all]
 """
 
-import json, time, re, sys, logging, argparse
+import json, time, re, sys, logging, argparse, ssl
 from pathlib import Path
 from datetime import datetime
 from bs4 import BeautifulSoup
 import urllib.request, urllib.error, urllib.parse
+
+# Bypass SSL verification for Swedish government sites with cert issues
+_SSL_CTX = ssl.create_default_context()
+_SSL_CTX.check_hostname = False
+_SSL_CTX.verify_mode = ssl.CERT_NONE
 
 BASE_DIR = Path.home() / "LAIW"
 OUT_DIR  = BASE_DIR / "data" / "raw" / "myndigheter"
@@ -42,7 +47,7 @@ def fetch(url: str, headers: dict = None) -> str | None:
     req = urllib.request.Request(url, headers=h)
     for attempt in range(1, MAX_RETRY + 1):
         try:
-            with urllib.request.urlopen(req, timeout=30) as r:
+            with urllib.request.urlopen(req, timeout=30, context=_SSL_CTX) as r:
                 return r.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as e:
             if e.code in (404, 410):
@@ -154,58 +159,65 @@ def download_jk():
         logging.info(f"  Laddat {len(existing):,} befintliga beslut")
 
     base_url = "https://www.jk.se"
-    list_url = f"{base_url}/beslut/?page="
     decisions = dict(existing)
-    page = 1
 
-    while True:
-        url = list_url + str(page)
-        html = fetch(url)
+    # JK-beslut URL-mönster: /beslut-och-yttranden/{år}/{månad}/{diarienr}/
+    # Hämta via kategori-sidor + iterera år/månader
+    categories = [
+        "/beslut-och-yttranden/?Skadest%C3%A5nd%C3%A4renden",
+        "/beslut-och-yttranden/?Ers%C3%A4ttning%20vid%20frihetsinskr%C3%A4nkning",
+        "/beslut-och-yttranden/?Tillsyns%C3%A4renden",
+        "/beslut-och-yttranden/?Tryck-%20och%20yttrandefrihets%C3%A4renden",
+        "/beslut-och-yttranden/?Remissyttranden",
+        "/beslut-och-yttranden/",
+    ]
+
+    decision_pat = re.compile(r"^/beslut-och-yttranden/\d{4}/")
+
+    all_decision_hrefs = set()
+    for cat_path in categories:
+        cat_url = base_url + cat_path
+        logging.info(f"  Kategori: {cat_path}")
+        html = fetch(cat_url)
         if not html:
-            break
+            continue
         soup = BeautifulSoup(html, "lxml")
-
-        # Hitta beslutslänkar
-        links = soup.find_all("a", href=re.compile(r"/beslut/\d+"))
-        if not links:
-            logging.info(f"  Inga fler beslut på sida {page}")
-            break
-
-        new_on_page = 0
-        for link in links:
+        for link in soup.find_all("a", href=decision_pat):
             href = link.get("href", "")
-            full_url = base_url + href if href.startswith("/") else href
-            if full_url in decisions:
-                continue
+            if href and "?" not in href:
+                all_decision_hrefs.add(href)
+        time.sleep(0.5)
 
-            detail_html = fetch(full_url)
-            if not detail_html:
-                continue
+    logging.info(f"  Hittade {len(all_decision_hrefs):,} beslut-URLs från kategorisidor")
 
-            detail_soup = BeautifulSoup(detail_html, "lxml")
-            title = detail_soup.find("h1")
-            title_text = title.get_text(strip=True) if title else ""
+    new_count = 0
+    for href in sorted(all_decision_hrefs):
+        full_url = base_url + href if href.startswith("/") else href
+        if full_url in decisions:
+            continue
 
-            main = detail_soup.find("main") or detail_soup.find("article") or detail_soup.find("div", class_=re.compile("content|main|article"))
-            body_text = text_from_html(str(main)) if main else ""
+        detail_html = fetch(full_url)
+        if not detail_html:
+            continue
 
-            decisions[full_url] = {
-                "url": full_url,
-                "title": title_text,
-                "text": body_text,
-                "source": "jk",
-            }
-            new_on_page += 1
-            time.sleep(SLEEP)
+        detail_soup = BeautifulSoup(detail_html, "lxml")
+        title = detail_soup.find("h1")
+        main = (detail_soup.find("main") or detail_soup.find("article") or
+                detail_soup.find("div", class_=re.compile(r"content|main|article")))
+        body_text = text_from_html(str(main)) if main else ""
+        if len(body_text) < 100:
+            continue
 
-        logging.info(f"  Sida {page}: +{new_on_page} beslut | Totalt: {len(decisions):,}")
-
-        # Kolla om det finns nästa sida
-        next_link = soup.find("a", href=re.compile(rf"page={page+1}"))
-        if not next_link and new_on_page == 0:
-            break
-        page += 1
+        decisions[full_url] = {
+            "url": full_url,
+            "title": title.get_text(strip=True) if title else "",
+            "text": body_text,
+            "source": "jk",
+        }
+        new_count += 1
         time.sleep(SLEEP)
+
+    logging.info(f"  +{new_count} nya JK-beslut")
 
     result = list(decisions.values())
     json.dump(result, open(out_file, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
@@ -215,7 +227,7 @@ def download_jk():
 
 # ─── DO — Diskrimineringsombudsmannen ─────────────────────────────────────────
 def download_do():
-    """DO publicerar ärenden på do.se"""
+    """DO publicerar beslut på do.se/rattsfall-beslut-lagar-stodmaterial/"""
     setup_logging("do")
     logging.info("=" * 60)
     logging.info("  DO - Diskrimineringsombudsmannen")
@@ -229,56 +241,63 @@ def download_do():
         logging.info(f"  Laddat {len(existing):,} befintliga ärenden")
 
     base_url = "https://www.do.se"
-    # DO har sökfunktion för ärenden och beslut
-    search_url = f"{base_url}/om-do/do-i-medierna/pressmeddelanden-och-nyheter/"
     decisions = dict(existing)
-    page = 0
 
-    while True:
-        url = search_url + (f"?page={page}" if page > 0 else "")
-        html = fetch(url)
-        if not html:
-            break
-        soup = BeautifulSoup(html, "lxml")
+    # DO har beslut under /rattsfall-beslut-lagar-stodmaterial/
+    list_pages = [
+        f"{base_url}/rattsfall-beslut-lagar-stodmaterial/tvister-domar-tillsynsbeslut/",
+        f"{base_url}/rattsfall-beslut-lagar-stodmaterial/",
+    ]
 
-        articles = soup.find_all("article") or soup.find_all("div", class_=re.compile("news|article|item|post"))
-        if not articles:
-            links = soup.find_all("a", href=re.compile(r"/om-do/|/for-den-som-upplever/|/om-diskriminering/"))
+    for list_url in list_pages:
+        logging.info(f"  Listar: {list_url}")
+        page = 0
+        while True:
+            url = list_url + (f"?page={page}" if page > 0 else "")
+            html = fetch(url)
+            if not html:
+                break
+            soup = BeautifulSoup(html, "lxml")
+
+            # DO uses article links
+            links = soup.find_all("a", href=re.compile(
+                r"/rattsfall-beslut-lagar-stodmaterial/.+|/tillsyn/.+|/yrk.+"
+            ))
             if not links:
                 break
-            articles = links
 
-        new_on_page = 0
-        for art in articles[:50]:
-            link = art if art.name == "a" else art.find("a", href=True)
-            if not link:
-                continue
-            href = link.get("href", "")
-            full_url = base_url + href if href.startswith("/") else href
-            if not full_url.startswith(base_url) or full_url in decisions:
-                continue
+            new_on_page = 0
+            for link in links:
+                href = link.get("href", "")
+                full_url = base_url + href if href.startswith("/") else href
+                if full_url in decisions or full_url in list_pages:
+                    continue
 
-            detail_html = fetch(full_url)
-            if not detail_html:
-                continue
+                detail_html = fetch(full_url)
+                if not detail_html:
+                    continue
 
-            detail_soup = BeautifulSoup(detail_html, "lxml")
-            title = detail_soup.find("h1")
-            main = detail_soup.find("main") or detail_soup.find("article")
-            decisions[full_url] = {
-                "url": full_url,
-                "title": title.get_text(strip=True) if title else "",
-                "text": text_from_html(str(main)) if main else "",
-                "source": "do",
-            }
-            new_on_page += 1
+                detail_soup = BeautifulSoup(detail_html, "lxml")
+                title = detail_soup.find("h1")
+                main = detail_soup.find("main") or detail_soup.find("article")
+                body = text_from_html(str(main)) if main else ""
+                if len(body) < 100:
+                    continue
+
+                decisions[full_url] = {
+                    "url": full_url,
+                    "title": title.get_text(strip=True) if title else "",
+                    "text": body,
+                    "source": "do",
+                }
+                new_on_page += 1
+                time.sleep(SLEEP)
+
+            logging.info(f"  Sida {page}: +{new_on_page} | Totalt: {len(decisions):,}")
+            if new_on_page == 0:
+                break
+            page += 1
             time.sleep(SLEEP)
-
-        logging.info(f"  Sida {page}: +{new_on_page} ärenden | Totalt: {len(decisions):,}")
-        if new_on_page == 0:
-            break
-        page += 1
-        time.sleep(SLEEP)
 
     result = list(decisions.values())
     json.dump(result, open(out_file, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
@@ -288,7 +307,7 @@ def download_do():
 
 # ─── DI — Datainspektionen / IMY ──────────────────────────────────────────────
 def download_di():
-    """IMY (fd Datainspektionen) publicerar GDPR-beslut på imy.se"""
+    """IMY publicerar GDPR-tillsynsbeslut på imy.se — hämta via nyheter/tillsyn-sidor"""
     setup_logging("di")
     logging.info("=" * 60)
     logging.info("  IMY/DI - Integritetsskyddsmyndigheten")
@@ -302,52 +321,65 @@ def download_di():
         logging.info(f"  Laddat {len(existing):,} befintliga beslut")
 
     base_url = "https://www.imy.se"
-    list_url = f"{base_url}/tillsyn/tillsynsbeslut/"
     decisions = dict(existing)
-    page = 0
 
-    while True:
-        url = list_url + (f"?page={page}" if page > 0 else "")
-        html = fetch(url)
-        if not html:
-            break
-        soup = BeautifulSoup(html, "lxml")
+    # IMY tillsynsbeslut är listade under /nyheter/ och /tillsyn/
+    list_urls = [
+        f"{base_url}/nyheter/",
+        f"{base_url}/tillsyn/",
+        f"{base_url}/nyheter/?page=",  # paginerad
+    ]
 
-        links = soup.find_all("a", href=re.compile(r"/tillsyn/tillsynsbeslut/\d+"))
-        if not links:
-            links = soup.find_all("a", href=re.compile(r"beslut|tillsyn"))
-        if not links:
-            logging.info(f"  Inga fler beslut på sida {page}")
-            break
+    for base_list in [f"{base_url}/nyheter/", f"{base_url}/tillsyn/"]:
+        logging.info(f"  Listar: {base_list}")
+        page = 0
+        while page < 50:
+            url = base_list + (f"?page={page}" if page > 0 else "")
+            html = fetch(url)
+            if not html:
+                break
+            soup = BeautifulSoup(html, "lxml")
 
-        new_on_page = 0
-        for link in links:
-            href = link.get("href", "")
-            full_url = base_url + href if href.startswith("/") else href
-            if full_url in decisions:
-                continue
+            # IMY article/news links
+            links = soup.find_all("a", href=re.compile(
+                r"/nyheter/tillsyn|/tillsyn/|/nyheter/\d"
+            ))
+            if not links:
+                break
 
-            detail_html = fetch(full_url)
-            if not detail_html:
-                continue
+            new_on_page = 0
+            for link in links:
+                href = link.get("href", "")
+                full_url = base_url + href if href.startswith("/") else href
+                if full_url in decisions:
+                    continue
 
-            detail_soup = BeautifulSoup(detail_html, "lxml")
-            title = detail_soup.find("h1")
-            main = detail_soup.find("main") or detail_soup.find("article") or detail_soup.find("div", class_=re.compile("content|main"))
-            decisions[full_url] = {
-                "url": full_url,
-                "title": title.get_text(strip=True) if title else "",
-                "text": text_from_html(str(main)) if main else "",
-                "source": "imy",
-            }
-            new_on_page += 1
+                detail_html = fetch(full_url)
+                if not detail_html:
+                    continue
+
+                detail_soup = BeautifulSoup(detail_html, "lxml")
+                title = detail_soup.find("h1")
+                main = (detail_soup.find("main") or detail_soup.find("article") or
+                        detail_soup.find("div", class_=re.compile(r"content|article|entry")))
+                body = text_from_html(str(main)) if main else ""
+                if len(body) < 100:
+                    continue
+
+                decisions[full_url] = {
+                    "url": full_url,
+                    "title": title.get_text(strip=True) if title else "",
+                    "text": body,
+                    "source": "imy",
+                }
+                new_on_page += 1
+                time.sleep(SLEEP)
+
+            logging.info(f"  Sida {page}: +{new_on_page} | Totalt: {len(decisions):,}")
+            if new_on_page == 0:
+                break
+            page += 1
             time.sleep(SLEEP)
-
-        logging.info(f"  Sida {page}: +{new_on_page} beslut | Totalt: {len(decisions):,}")
-        if new_on_page == 0:
-            break
-        page += 1
-        time.sleep(SLEEP)
 
     result = list(decisions.values())
     json.dump(result, open(out_file, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
