@@ -44,6 +44,7 @@ DOC_TYPES = {
     "fr":   "fr_all.json",    # Skriftliga frågor (44k docs)
     "ip":   "ip_all.json",    # Interpellationer (15k docs)
     "dir":  "dir_all.json",   # Kommittédirektiv (6k docs)
+    "yttr": "yttr_all.json",  # Yttranden/utlåtanden (4.6k docs)
 }
 
 # ─── LOGGING ──────────────────────────────────────────────────────────────────
