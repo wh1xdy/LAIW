@@ -50,8 +50,9 @@ def get_start_unik(letter: str) -> str | None:
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             html = r.read().decode("utf-8","replace")
-        uniks = re.findall(r'unik="([^"]+)"', html)
-        return uniks[0] if uniks else None
+        # Use href-based extraction to avoid picking up nav button unik= attributes
+        hrefs = re.findall(r'href="/artikel/\?unik=([^&"]+)', html)
+        return hrefs[0] if hrefs else None
     except:
         return None
 
@@ -86,9 +87,9 @@ if __name__ == "__main__":
                 continue
             consecutive_empty = 0
 
-            # Kontrollera om vi lämnat bokstaven
-            first_label = entries[0]["label"].upper()
-            if first_label and not first_label.startswith(letter):
+            # Kontrollera om vi lämnat bokstaven (via unik-prefix, ej label som kan börja med bindestreck)
+            first_unik = entries[0]["unik"].upper()
+            if first_unik and not first_unik.startswith(letter):
                 logging.info(f"  Nått slutet av {letter} efter {letter_count} ord")
                 break
 

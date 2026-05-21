@@ -44,7 +44,15 @@ def xml_to_text(raw: bytes) -> str:
     try:
         root = etree.fromstring(raw)
         for elem in root.iter():
-            if elem.tag in ("text","html","body"):
+            if elem.tag == "html":
+                # riksdagen motioner/fr/ip/dir store HTML as text content inside <html>
+                html_str = (elem.text or "").strip()
+                if html_str and html_str.startswith("<"):
+                    return html_to_text(html_str)
+                html_str = etree.tostring(elem, encoding="unicode", method="html")
+                if html_str.strip():
+                    return html_to_text(html_str)
+            elif elem.tag in ("text", "body"):
                 t = etree.tostring(elem, encoding="unicode", method="text")
                 if t.strip(): return clean_text(t)
         return clean_text(etree.tostring(root, encoding="unicode", method="text"))
@@ -169,13 +177,51 @@ def merge_all():
     logging.info(f"  dataset.jsonl: {total:,} dokument, {gb:.2f} GB")
     return total, gb
 
+def process_myndigheter():
+    out = OUT_DIR / "myndigheter.jsonl"
+    ok = skip = err = 0; t0 = time.time()
+    sources = {
+        "jo": RAW / "myndigheter" / "jo_decisions.json",
+        "jk": RAW / "myndigheter" / "jk_decisions.json",
+        "do": RAW / "myndigheter" / "do_decisions.json",
+        "di": RAW / "myndigheter" / "di_decisions.json",
+    }
+    with open(out, "w", encoding="utf-8") as f:
+        for src_name, path in sources.items():
+            if not path.exists():
+                continue
+            decisions = json.load(open(path))
+            logging.info(f"  Myndigheter {src_name}: {len(decisions):,} beslut")
+            for d in decisions:
+                text = d.get("text", "").strip()
+                if len(text) < MIN_CHARS:
+                    skip += 1; continue
+                try:
+                    f.write(json.dumps({"text": trunc(text), "source": f"myndighet_{src_name}",
+                        "meta": {"url": d.get("url",""), "title": d.get("title",""),
+                                 "diarienummer": d.get("diarienummer","")}},
+                        ensure_ascii=False) + "\n")
+                    ok += 1
+                except Exception as e:
+                    err += 1
+    mb = out.stat().st_size / 1e6
+    logging.info(f"  Myndigheter klar: {ok:,} OK, {skip} skip, {err} fel | {mb:.0f} MB | {time.time()-t0:.0f}s")
+    return {"source": "myndigheter", "docs": ok, "size_mb": mb}
+
 SOURCE_MAP = {
-    "sfs":     lambda: process_riksdagen("sfs",  ["sfs"]),
-    "prop":    lambda: process_riksdagen("prop", ["prop"]),
-    "bet":     lambda: process_riksdagen("bet",  ["bet"]),
-    "sou":     lambda: process_riksdagen("sou",  ["sou"]),
-    "eu":      process_eu,
-    "domstol": process_domstol,
+    "sfs":         lambda: process_riksdagen("sfs",  ["sfs"]),
+    "prop":        lambda: process_riksdagen("prop", ["prop"]),
+    "bet":         lambda: process_riksdagen("bet",  ["bet"]),
+    "sou":         lambda: process_riksdagen("sou",  ["sou"]),
+    "ds":          lambda: process_riksdagen("ds",   ["ds"]),
+    "prot":        lambda: process_riksdagen("prot", ["prot"]),
+    "mot":         lambda: process_riksdagen("mot",  ["mot"]),
+    "fr":          lambda: process_riksdagen("fr",   ["fr"]),
+    "ip":          lambda: process_riksdagen("ip",   ["ip"]),
+    "dir":         lambda: process_riksdagen("dir",  ["dir"]),
+    "eu":          process_eu,
+    "domstol":     process_domstol,
+    "myndigheter": process_myndigheter,
 }
 
 if __name__ == "__main__":
