@@ -38,6 +38,8 @@ DOC_TYPES = {
     "prop": "prop_all.json",
     "bet":  "bet_all.json",
     "sou":  "sou_all.json",
+    "ds":   "ds_all.json",
+    "prot": "prot_all.json",
 }
 
 # ─── LOGGING ──────────────────────────────────────────────────────────────────

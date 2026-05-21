@@ -38,6 +38,8 @@ META_FILES = {
     "bet":          RAW_DIR / "bet_all.json",
     "bet_modern":   RAW_DIR / "bet_modern.json",
     "sou":          RAW_DIR / "sou_all.json",
+    "ds":           RAW_DIR / "ds_all.json",
+    "prot":         RAW_DIR / "prot_all.json",
 }
 
 # ─── LOGGING ──────────────────────────────────────────────────────────────────
