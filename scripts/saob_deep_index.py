@@ -50,9 +50,13 @@ def get_start_unik(letter: str) -> str | None:
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             html = r.read().decode("utf-8","replace")
-        # Use href-based extraction to avoid picking up nav button unik= attributes
-        hrefs = re.findall(r'href="/artikel/\?unik=([^&"]+)', html)
-        return hrefs[0] if hrefs else None
+        # Stop at # (fragments) and & — seek page has nav+cross-ref links mixed in
+        hrefs = re.findall(r'href="/artikel/\?unik=([^&#"]+)', html)
+        # Return first unik that starts with the target letter (case-insensitive)
+        for h in hrefs:
+            if h.upper().startswith(letter.upper()):
+                return h
+        return None
     except:
         return None
 
