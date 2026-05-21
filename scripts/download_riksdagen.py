@@ -40,6 +40,10 @@ DOC_TYPES = {
     "sou":  "sou_all.json",
     "ds":   "ds_all.json",
     "prot": "prot_all.json",
+    "mot":  "mot_all.json",   # Motioner (257k docs)
+    "fr":   "fr_all.json",    # Skriftliga frågor (44k docs)
+    "ip":   "ip_all.json",    # Interpellationer (15k docs)
+    "dir":  "dir_all.json",   # Kommittédirektiv (6k docs)
 }
 
 # ─── LOGGING ──────────────────────────────────────────────────────────────────
