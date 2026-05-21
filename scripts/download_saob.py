@@ -241,11 +241,26 @@ def fetch_all_articles(words_only: bool = False):
                 pass
             continue
 
-        # Extrahera seek-term från länk
-        seek_match = re.search(r'seek=([^&]+)', link)
-        seek = urllib.parse.unquote(seek_match.group(1)) if seek_match else label
-
-        html = fetch_article_html(seek)
+        # Prefer unik-based fetch (from saob_deep_index.py); fall back to seek
+        unik = entry.get("unik")
+        if unik:
+            url = f"{BASE_URL}/artikel/?unik={unik}&pz=2"
+        else:
+            seek_match = re.search(r'seek=([^&]+)', link)
+            seek = urllib.parse.unquote(seek_match.group(1)) if seek_match else label
+            url = f"{BASE_URL}/artikel/?seek={urllib.parse.quote(seek)}&pz=2"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; LAIW/1.0)", "Referer": "https://www.saob.se/"})
+        html = None
+        for attempt in range(1, MAX_RETRY + 1):
+            try:
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    html = r.read().decode("utf-8", errors="replace")
+                break
+            except urllib.error.HTTPError as e:
+                if e.code == 404: break
+                if attempt < MAX_RETRY: time.sleep(3 * attempt)
+            except Exception:
+                if attempt < MAX_RETRY: time.sleep(3 * attempt)
         if html:
             article = extract_article_text(html, label)
             article["link"] = link
