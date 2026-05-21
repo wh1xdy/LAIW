@@ -12,16 +12,17 @@ Fine-tuning **Mistral 7B** on Swedish and EU legal data to create a Swedish lega
 | Riksdagen SOU | ~4,896 statliga utredningar | ~6.6 GB |
 | Riksdagen Ds | ~1,635 departementsserien | ~1 GB |
 | Riksdagen Prot | ~9,992 protokoll | ~4.3 GB |
-| Riksdagen Mot | ~257,913 motioner | (laddar ner) |
-| Riksdagen Fr | ~43,913 skriftliga frågor | (laddar ner) |
-| Riksdagen Ip | ~15,667 interpellationer | (laddar ner) |
-| Riksdagen Dir | ~6,385 kommittédirektiv | (laddar ner) |
+| Riksdagen Mot | ~9,905 motioner (10k unika) | ~280 MB |
+| Riksdagen Fr | ~9,999 skriftliga frågor | ~47 MB |
+| Riksdagen Ip | ~9,943 interpellationer | ~27 MB |
+| Riksdagen Dir | ~788 kommittédirektiv | ~10 MB |
+| Riksdagen Yttr | ~4,588 yttranden | ~100 MB |
 | EU-rätt | 10,745/34,133 texter | ~1.2 GB |
 | Domstolar | ~16,626 avgöranden | ~409 MB |
-| JO | ~3,714 beslut | (laddar ner) |
-| SAOB | ~500,000 ord | (bygger index) |
+| JO | 3,714 beslut | ~3.9 MB |
+| SAOB | 75,717 ord indexerade (A–Ö) | — |
 
-**Preprocessat dataset (dataset.jsonl): 93,318 dokument, 19.65 GB**
+**Preprocessat dataset (dataset.jsonl): ~130,000 dokument, ~22 GB**
 
 ## Struktur
 
@@ -71,28 +72,30 @@ python3 scripts/download_saob.py     # ladda ner artiklar (~55 timmar)
 python3 scripts/preprocess.py --source all
 ```
 
-## Status (2026-05-21)
+## Status (2026-05-22)
 
 | Dataset | Status | Dokument | Storlek |
 |---------|--------|----------|---------|
 | SFS (text) | ✅ | 9,994 XML | 192 MB |
-| Prop (text) | ✅ | 19,964 XML | 9.7 GB |
+| Prop (text) | ✅ | 19,992 XML | 9.7 GB |
 | Bet (text) | ✅ | 19,466 XML | 2.8 GB |
 | SOU (text) | ✅ | 4,896 XML | 6.6 GB |
 | Ds (text) | ✅ | 1,635 XML | 1 GB |
 | Prot (text) | ✅ | 9,992 XML | 4.3 GB |
-| Mot (index) | 🔄 | 257,913 dok | laddar ner |
-| Fr (index) | 🔄 | 43,913 dok | laddar ner |
-| Ip (index) | 🔄 | 15,667 dok | laddar ner |
-| Dir (index) | 🔄 | 6,385 dok | laddar ner |
+| Mot (text) | ✅ | 9,905 XML (10k unika dok_id) | 280 MB |
+| Fr (text) | ✅ | 9,999 XML | 47 MB |
+| Ip (text) | ✅ | 9,943 XML | 27 MB |
+| Dir (text) | ✅ | 788 XML | 10 MB |
+| Yttr (text) | ✅ | 4,588 XML | 100 MB |
 | EU (texter) | ⚠️ WAF | 10,745/34,133 | 1.2 GB |
 | Domstolar | ✅ | 16,626 avgöranden | 409 MB |
-| JO | 🔄 | ~700/3,714 | laddar ner |
-| SAOB index | 🔄 | ~17k/500k ord | bygger |
+| JO | ✅ | 3,714 beslut | 3.9 MB |
+| SAOB index | ✅ | 75,717 ord (A–Ö) | — |
+| SAOB artiklar | ❌ | ej startat (~55 h) | — |
 
 ## Preprocessat dataset
 
-- **93,318 dokument, 19.65 GB** (2026-05-21)
+- **~130,000 dokument, ~22 GB** (2026-05-22, merge pågår)
 - Plats: `~/LAIW/data/processed/dataset.jsonl`
 - Format: JSONL, ett dokument per rad: `{"text":"...","source":"...","meta":{}}`
 
