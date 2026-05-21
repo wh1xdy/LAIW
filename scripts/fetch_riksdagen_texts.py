@@ -40,6 +40,10 @@ META_FILES = {
     "sou":          RAW_DIR / "sou_all.json",
     "ds":           RAW_DIR / "ds_all.json",
     "prot":         RAW_DIR / "prot_all.json",
+    "mot":          RAW_DIR / "mot_all.json",
+    "fr":           RAW_DIR / "fr_all.json",
+    "ip":           RAW_DIR / "ip_all.json",
+    "dir":          RAW_DIR / "dir_all.json",
 }
 
 # ─── LOGGING ──────────────────────────────────────────────────────────────────
