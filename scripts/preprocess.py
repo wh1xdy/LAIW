@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+"""
+LAIW Preprocessing Pipeline
+Konverterar rådata (XML, HTML, JSON) → ren text → JSONL träningsdataset
+
+Output: ~/LAIW/data/processed/
+  {source}.jsonl        ett dokument per rad: {"text":"...","source":"...","meta":{}}
+  dataset.jsonl         alla källor sammanslagna
+  dataset_stats.json    statistik
+
+Kör: python3 preprocess.py [--source all|sfs|prop|bet|sou|eu|domstol]
+"""
+import json, re, sys, argparse, logging, time
+from pathlib import Path
+from datetime import datetime
+from bs4 import BeautifulSoup
+from lxml import etree
+
+BASE    = Path.home() / "LAIW"
+RAW     = BASE / "data" / "raw"
+OUT_DIR = BASE / "data" / "processed"
+LOG_DIR = BASE / "logs"
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+MIN_CHARS = 200
+MAX_CHARS = 2_000_000
+
+def setup_logging():
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    lf = LOG_DIR / f"preprocess_{ts}.log"
+    logging.basicConfig(level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[logging.FileHandler(lf), logging.StreamHandler(sys.stdout)])
+    logging.info(f"Log: {lf}")
+
+# ── text extraction ────────────────────────────────────────────────────────────
+def html_to_text(html: str) -> str:
+    soup = BeautifulSoup(html, "lxml")
+    for tag in soup(["script","style","head","meta","link"]): tag.decompose()
+    return clean_text(soup.get_text(separator="\n"))
+
+def xml_to_text(raw: bytes) -> str:
+    try:
+        root = etree.fromstring(raw)
+        for elem in root.iter():
+            if elem.tag in ("text","html","body"):
+                t = etree.tostring(elem, encoding="unicode", method="text")
+                if t.strip(): return clean_text(t)
+        return clean_text(etree.tostring(root, encoding="unicode", method="text"))
+    except Exception:
+        return html_to_text(raw.decode("utf-8", errors="replace"))
+
+def clean_text(t: str) -> str:
+    t = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', t)
+    t = re.sub(r'\n{3,}', '\n\n', t)
+    t = "\n".join(re.sub(r' {3,}', '  ', l) for l in t.split('\n'))
+    return t.strip()
+
+def trunc(t: str) -> str:
+    return t[:MAX_CHARS] + "\n[TRUNKERAT]" if len(t) > MAX_CHARS else t
+
+# ── sources ────────────────────────────────────────────────────────────────────
+def process_riksdagen(doctype, subdirs):
+    out = OUT_DIR / f"{doctype}.jsonl"
+    ok = skip = err = 0
+    t0 = time.time()
+    files = []
+    for s in subdirs:
+        d = RAW / "riksdagen" / "texts" / s
+        if d.exists(): files.extend(d.glob("*.xml"))
+    logging.info(f"  {doctype.upper()}: {len(files):,} XML-filer")
+    seen = set()
+    with open(out, "w", encoding="utf-8") as f:
+        for p in files:
+            did = p.stem.upper()
+            if did in seen: skip += 1; continue
+            seen.add(did)
+            try:
+                text = xml_to_text(p.read_bytes())
+                if len(text) < MIN_CHARS: skip += 1; continue
+                f.write(json.dumps({"text": trunc(text), "source": doctype,
+                    "meta": {"dok_id": did}}, ensure_ascii=False) + "\n")
+                ok += 1
+            except Exception as e:
+                err += 1
+                if err <= 3: logging.warning(f"  {p.name}: {e}")
+    mb = out.stat().st_size / 1e6
+    logging.info(f"  {doctype.upper()} klar: {ok:,} OK, {skip:,} skip, {err} fel | {mb:.0f} MB | {time.time()-t0:.0f}s")
+    return {"source": doctype, "docs": ok, "size_mb": mb}
+
+def process_eu():
+    out = OUT_DIR / "eu.jsonl"
+    meta_map = {}
+    idx = RAW / "eu" / "eu_legislation_index.json"
+    if idx.exists():
+        for d in json.load(open(idx)): meta_map[d.get("celex","")] = d
+    files = list((RAW / "eu" / "texts").glob("*.html"))
+    logging.info(f"  EU: {len(files):,} HTML-filer")
+    ok = skip = err = 0; t0 = time.time()
+    with open(out, "w", encoding="utf-8") as f:
+        for p in files:
+            try:
+                text = html_to_text(p.read_text(encoding="utf-8", errors="replace"))
+                if len(text) < MIN_CHARS: skip += 1; continue
+                m = meta_map.get(p.stem, {})
+                f.write(json.dumps({"text": trunc(text), "source": "eu",
+                    "meta": {"celex": p.stem, "title": m.get("title",""),
+                             "date": m.get("date",""), "type": m.get("type","")}},
+                    ensure_ascii=False) + "\n")
+                ok += 1
+            except Exception as e:
+                err += 1
+    mb = out.stat().st_size / 1e6
+    logging.info(f"  EU klar: {ok:,} OK, {skip} skip, {err} fel | {mb:.0f} MB | {time.time()-t0:.0f}s")
+    return {"source": "eu", "docs": ok, "size_mb": mb}
+
+def process_domstol():
+    out = OUT_DIR / "domstol.jsonl"
+    ok = skip = err = 0; t0 = time.time()
+    with open(out, "w", encoding="utf-8") as f:
+        # Vägledande – fulltext HTML
+        vag = RAW / "domstolar" / "vagledande_all.json"
+        if vag.exists():
+            cases = json.load(open(vag))
+            logging.info(f"  Domstol vägledande: {len(cases):,} fall")
+            for c in cases:
+                html = c.get("innehall","")
+                if not html or len(html) < MIN_CHARS: skip += 1; continue
+                try:
+                    text = html_to_text(html)
+                    if len(text) < MIN_CHARS: skip += 1; continue
+                    f.write(json.dumps({"text": trunc(text), "source": "domstol_vagledande",
+                        "meta": {"id": c.get("id",""), "domstol": c.get("domstol",{}).get("domstolNamn",""),
+                                 "datum": c.get("avgorandedatum",""),
+                                 "rattsomrade": c.get("rattsomradeLista",[])}},
+                        ensure_ascii=False) + "\n")
+                    ok += 1
+                except: err += 1
+        # Övriga – sammanfattning
+        ovr = RAW / "domstolar" / "ovriga_all.json"
+        if ovr.exists():
+            cases = json.load(open(ovr))
+            logging.info(f"  Domstol övriga: {len(cases):,} fall")
+            for c in cases:
+                text = c.get("sammanfattning","").strip()
+                if len(text) < MIN_CHARS: skip += 1; continue
+                f.write(json.dumps({"text": text, "source": "domstol_ovriga",
+                    "meta": {"id": c.get("id",""), "domstol": c.get("domstol",{}).get("domstolNamn",""),
+                             "datum": c.get("avgorandedatum","")}},
+                    ensure_ascii=False) + "\n")
+                ok += 1
+    mb = out.stat().st_size / 1e6
+    logging.info(f"  Domstol klar: {ok:,} OK, {skip} skip, {err} fel | {mb:.0f} MB | {time.time()-t0:.0f}s")
+    return {"source": "domstol", "docs": ok, "size_mb": mb}
+
+def merge_all():
+    out = OUT_DIR / "dataset.jsonl"
+    total = 0
+    logging.info(f"\n  Slår ihop → dataset.jsonl")
+    with open(out, "w", encoding="utf-8") as fout:
+        for src in sorted(OUT_DIR.glob("*.jsonl")):
+            if src.name == "dataset.jsonl": continue
+            n = sum(1 for line in open(src, encoding="utf-8")
+                    if fout.write(line) or True)
+            logging.info(f"    {src.name}: {n:,}")
+            total += n
+    gb = out.stat().st_size / 1e9
+    logging.info(f"  dataset.jsonl: {total:,} dokument, {gb:.2f} GB")
+    return total, gb
+
+SOURCE_MAP = {
+    "sfs":     lambda: process_riksdagen("sfs",  ["sfs"]),
+    "prop":    lambda: process_riksdagen("prop", ["prop"]),
+    "bet":     lambda: process_riksdagen("bet",  ["bet"]),
+    "sou":     lambda: process_riksdagen("sou",  ["sou"]),
+    "eu":      process_eu,
+    "domstol": process_domstol,
+}
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--source", default="all",
+        choices=["all"]+list(SOURCE_MAP.keys()))
+    parser.add_argument("--no-merge", action="store_true")
+    args = parser.parse_args()
+    setup_logging()
+    logging.info("="*60)
+    logging.info("  LAIW PREPROCESSING PIPELINE")
+    logging.info("="*60)
+    sources = list(SOURCE_MAP.keys()) if args.source=="all" else [args.source]
+    stats = [SOURCE_MAP[s]() for s in sources]
+    if not args.no_merge and args.source=="all":
+        total, gb = merge_all()
+        stats.append({"source":"TOTAL","docs":total,"size_mb":gb*1000})
+    json.dump(stats, open(OUT_DIR/"dataset_stats.json","w"), indent=2, ensure_ascii=False)
+    logging.info("\n"+"="*60+"  KLART")
+    for s in stats:
+        logging.info(f"  {s['source']:15s} {s['docs']:>8,} dok  {s['size_mb']:>8.0f} MB")
