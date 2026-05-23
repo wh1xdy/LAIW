@@ -20,9 +20,12 @@ Fine-tuning **Mistral 7B** on Swedish and EU legal data to create a Swedish lega
 | EU-rätt | 10,745/34,133 texter | ~1.2 GB |
 | Domstolar | ~16,626 avgöranden | ~409 MB |
 | JO | 3,714 beslut | ~3.9 MB |
-| SAOB | 75,717 ord indexerade (A–Ö) | — |
+| SAOB | 75,111 artiklar (27,737 nya + 47,374 cachade) | ~72 MB |
+| JO | 3,714 beslut | ~3.9 MB |
+| JK | 10 beslut (JS-renderad, begränsad) | ~0.1 MB |
+| DO | 33 beslut (JS-renderad, begränsad) | ~0.2 MB |
 
-**Preprocessat dataset (dataset.jsonl): ~130,000 dokument, ~22 GB**
+**Preprocessat dataset (dataset.jsonl): ~162,000 dokument** (efter SAOB-tillägg)
 
 ## Struktur
 
@@ -35,9 +38,13 @@ LAIW/
 │   ├── fetch_eurlex_texts.py     # Hämtar EU-texter i HTML
 │   ├── download_domstolar.py     # Domstolsavgöranden
 │   ├── download_myndigheter.py   # JO/JK/DO/DI-beslut
-│   ├── download_saob.py          # SAOB ordbok + artikelnedladdning
+│   ├── download_saob.py          # SAOB ordbok + artikelnedladdning (async, 3 workers)
 │   ├── saob_deep_index.py        # Djup SAOB-indexering via scrollist-API
 │   └── preprocess.py             # Raw → JSONL träningsdataset
+├── tools/                        # RAG-verktyg för inferens
+│   ├── legal_search.py           # search_sfs, get_law, search_riksdagen, search_domstol, search_eurlex
+│   ├── chat.py                   # Interaktiv chat-loop med verktygsanrop
+│   └── __init__.py
 ├── data/                         # (gitignorerad - för stor)
 │   ├── raw/                      # Rådata per källa
 │   └── processed/                # Färdigt JSONL-dataset
@@ -72,7 +79,7 @@ python3 scripts/download_saob.py     # ladda ner artiklar (~55 timmar)
 python3 scripts/preprocess.py --source all
 ```
 
-## Status (2026-05-22)
+## Status (2026-05-23)
 
 | Dataset | Status | Dokument | Storlek |
 |---------|--------|----------|---------|
@@ -90,14 +97,36 @@ python3 scripts/preprocess.py --source all
 | EU (texter) | ⚠️ WAF | 10,745/34,133 | 1.2 GB |
 | Domstolar | ✅ | 16,626 avgöranden | 409 MB |
 | JO | ✅ | 3,714 beslut | 3.9 MB |
-| SAOB index | ✅ | 75,717 ord (A–Ö) | — |
-| SAOB artiklar | ❌ | ej startat (~55 h) | — |
+| SAOB artiklar | ✅ | 75,111 artiklar, 31,723 preprocessade | 72 MB |
+| JK beslut | ⚠️ JS | 10 beslut (max utan Playwright) | 0.1 MB |
+| DO beslut | ⚠️ JS | 33 beslut (max utan Playwright) | 0.2 MB |
+| DI/IMY beslut | ⚠️ JS | 0 beslut (fullständigt JS-renderad) | — |
 
 ## Preprocessat dataset
 
 - **~130,000 dokument, ~22 GB** (2026-05-22, merge pågår)
 - Plats: `~/LAIW/data/processed/dataset.jsonl`
 - Format: JSONL, ett dokument per rad: `{"text":"...","source":"...","meta":{}}`
+
+## RAG-verktyg (inferens)
+
+Modellen kan söka i juridiska källor live vid inferenstid via `tools/`:
+
+```python
+from tools import search_sfs, get_law, search_riksdagen, search_domstol, search_eurlex
+
+# Sök lagar
+results = search_sfs("avtalslagen")
+
+# Hämta fulltext
+law = get_law("SFS-1915-218")
+
+# Interaktiv chat med verktygsanrop (kräver ANTHROPIC_API_KEY)
+# python3 -m tools.chat
+```
+
+Verktyg: `search_sfs`, `get_law`, `search_riksdagen`, `search_domstol`, `search_eurlex`  
+Kompatibel med Anthropic API tool_use samt Mistral function calling.
 
 ## Kända begränsningar
 
