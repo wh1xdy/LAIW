@@ -18,7 +18,7 @@ Kör: python3 download_saob.py [--words-only] [--batch A-F]
 Obs: ~500,000 ord × 0.3 sek ≈ 40 timmar. Kör med nohup eller i delar.
 """
 
-import json, time, sys, os, re, logging, argparse
+import json, time, sys, os, re, logging, argparse, asyncio
 from pathlib import Path
 from datetime import datetime
 import urllib.request, urllib.parse, urllib.error
@@ -33,11 +33,12 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 ART_DIR.mkdir(parents=True, exist_ok=True)
 
-AJAX_URL  = "https://www.saob.se/wp-admin/admin-ajax.php"
-BASE_URL  = "https://www.saob.se"
-SLEEP_AC  = 0.3   # autocomplete
-SLEEP_ART = 0.4   # article fetch
-MAX_RETRY = 4
+AJAX_URL   = "https://www.saob.se/wp-admin/admin-ajax.php"
+BASE_URL   = "https://www.saob.se"
+SLEEP_AC   = 0.3   # autocomplete
+SLEEP_ART  = 0.2   # article fetch delay per worker
+MAX_RETRY  = 4
+WORKERS    = 3     # concurrent article fetchers
 
 # Svenska bokstäver (inkl digrafer och vanliga kombinationer)
 LETTERS = list("ABCDEFGHIJKLMNOPQRSTUVWXYZÅÄÖ")
@@ -210,83 +211,105 @@ def build_word_index(batch_filter: str | None = None) -> list[dict]:
     logging.info(f"\n  Ordindex klart: {len(result):,} unika ord")
     return result
 
+async def _fetch_one(session, entry, semaphore, stats, all_articles, out_file, start_time, total):
+    label = entry.get("label", "")
+    link  = entry.get("link", "")
+    if not label:
+        return
+
+    safe = re.sub(r'[^\w\-]', '_', label)[:80]
+    art_path = ART_DIR / f"{safe}.json"
+    if art_path.exists():
+        stats["skip"] += 1
+        try:
+            all_articles.append(json.loads(art_path.read_text()))
+        except:
+            pass
+        return
+
+    unik = entry.get("unik")
+    if unik:
+        url = f"{BASE_URL}/artikel/?unik={unik}&pz=2"
+    else:
+        seek_match = re.search(r'seek=([^&]+)', link)
+        seek = urllib.parse.unquote(seek_match.group(1)) if seek_match else label
+        url = f"{BASE_URL}/artikel/?seek={urllib.parse.quote(seek)}&pz=2"
+
+    async with semaphore:
+        import aiohttp as _aiohttp
+        html = None
+        for attempt in range(1, MAX_RETRY + 1):
+            try:
+                async with session.get(url, timeout=_aiohttp.ClientTimeout(total=20)) as resp:
+                    if resp.status == 404:
+                        break
+                    if resp.status == 200:
+                        html = await resp.text(errors="replace")
+                        break
+                    if attempt < MAX_RETRY:
+                        await asyncio.sleep(3 * attempt)
+            except Exception:
+                if attempt < MAX_RETRY:
+                    await asyncio.sleep(3 * attempt)
+        await asyncio.sleep(SLEEP_ART)
+
+    if html:
+        article = extract_article_text(html, label)
+        article["link"] = link
+        art_path.write_text(json.dumps(article, ensure_ascii=False))
+        all_articles.append(article)
+        stats["ok"] += 1
+    else:
+        stats["fail"] += 1
+
+    done = stats["ok"] + stats["skip"] + stats["fail"]
+    if done % 500 == 0:
+        elapsed = time.time() - start_time
+        rate = stats["ok"] / elapsed if elapsed > 0 else 0
+        remaining = total - done
+        eta_h = (remaining / rate / 3600) if rate > 0 else 0
+        logging.info(
+            f"  [{done}/{total}] OK:{stats['ok']} Skip:{stats['skip']} Fail:{stats['fail']}"
+            f" | ETA: {eta_h:.1f}h"
+        )
+        json.dump(all_articles, open(out_file, "w", encoding="utf-8"),
+                  ensure_ascii=False, separators=(",", ":"))
+
+
 def fetch_all_articles(words_only: bool = False):
-    """Hämta alla artiklar baserat på ordindex."""
+    """Hämta alla artiklar baserat på ordindex (async, {WORKERS} workers)."""
+    import aiohttp
+
     index_file = OUT_DIR / "word_index.json"
     if not index_file.exists():
         logging.error("  Kör med --words-only först för att bygga ordindex!")
         return
 
     word_list = json.loads(index_file.read_text())
-    logging.info(f"  Hämtar artiklar för {len(word_list):,} ord...")
+    logging.info(f"  Hämtar artiklar för {len(word_list):,} ord ({WORKERS} workers, {SLEEP_ART}s sleep)...")
 
-    all_articles = []
     out_file = OUT_DIR / "saob_complete.json"
+    all_articles = []
+    stats = {"ok": 0, "skip": 0, "fail": 0}
 
-    ok = skip = fail = 0
-    for i, entry in enumerate(word_list, 1):
-        label = entry.get("label", "")
-        link  = entry.get("link", "")
-        if not label:
-            continue
+    async def run():
+        semaphore = asyncio.Semaphore(WORKERS)
+        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; LAIW/1.0)", "Referer": "https://www.saob.se/"}
+        connector = aiohttp.TCPConnector(limit=WORKERS, ssl=False)
+        start_time = time.time()
+        async with aiohttp.ClientSession(headers=headers, connector=connector) as session:
+            tasks = [
+                _fetch_one(session, entry, semaphore, stats, all_articles, out_file, start_time, len(word_list))
+                for entry in word_list
+            ]
+            await asyncio.gather(*tasks)
 
-        # Artikel-fil för cache
-        safe = re.sub(r'[^\w\-]', '_', label)[:80]
-        art_path = ART_DIR / f"{safe}.json"
-        if art_path.exists():
-            skip += 1
-            try:
-                all_articles.append(json.loads(art_path.read_text()))
-            except:
-                pass
-            continue
+    asyncio.run(run())
 
-        # Prefer unik-based fetch (from saob_deep_index.py); fall back to seek
-        unik = entry.get("unik")
-        if unik:
-            url = f"{BASE_URL}/artikel/?unik={unik}&pz=2"
-        else:
-            seek_match = re.search(r'seek=([^&]+)', link)
-            seek = urllib.parse.unquote(seek_match.group(1)) if seek_match else label
-            url = f"{BASE_URL}/artikel/?seek={urllib.parse.quote(seek)}&pz=2"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; LAIW/1.0)", "Referer": "https://www.saob.se/"})
-        html = None
-        for attempt in range(1, MAX_RETRY + 1):
-            try:
-                with urllib.request.urlopen(req, timeout=20) as r:
-                    html = r.read().decode("utf-8", errors="replace")
-                break
-            except urllib.error.HTTPError as e:
-                if e.code == 404: break
-                if attempt < MAX_RETRY: time.sleep(3 * attempt)
-            except Exception:
-                if attempt < MAX_RETRY: time.sleep(3 * attempt)
-        if html:
-            article = extract_article_text(html, label)
-            article["link"] = link
-            art_path.write_text(json.dumps(article, ensure_ascii=False))
-            all_articles.append(article)
-            ok += 1
-        else:
-            fail += 1
-
-        if i % 500 == 0:
-            eta_h = ((len(word_list) - i) * SLEEP_ART) / 3600
-            logging.info(
-                f"  [{i}/{len(word_list)}] OK:{ok} Skip:{skip} Fail:{fail} "
-                f"| ETA: {eta_h:.1f}h"
-            )
-            # Checkpoint
-            json.dump(all_articles, open(out_file, "w", encoding="utf-8"),
-                      ensure_ascii=False, separators=(",", ":"))
-
-        time.sleep(SLEEP_ART)
-
-    # Slutspar
     json.dump(all_articles, open(out_file, "w", encoding="utf-8"),
               ensure_ascii=False, separators=(",", ":"))
     size_mb = out_file.stat().st_size / 1_048_576
-    logging.info(f"\n  KLART: {ok:,} hämtade, {skip:,} cachade, {fail:,} fel")
+    logging.info(f"\n  KLART: {stats['ok']:,} hämtade, {stats['skip']:,} cachade, {stats['fail']:,} fel")
     logging.info(f"  Output: {out_file} ({size_mb:.0f} MB)")
 
 if __name__ == "__main__":

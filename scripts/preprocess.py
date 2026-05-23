@@ -208,6 +208,36 @@ def process_myndigheter():
     logging.info(f"  Myndigheter klar: {ok:,} OK, {skip} skip, {err} fel | {mb:.0f} MB | {time.time()-t0:.0f}s")
     return {"source": "myndigheter", "docs": ok, "size_mb": mb}
 
+def process_saob():
+    import html as html_module
+    out = OUT_DIR / "saob.jsonl"
+    ok = skip = 0; t0 = time.time()
+    src = BASE / "data" / "raw" / "saob" / "saob_complete.json"
+    if not src.exists():
+        logging.warning("  saob_complete.json saknas")
+        return {"source": "saob", "docs": 0, "size_mb": 0}
+    entries = json.load(open(src, encoding="utf-8"))
+    logging.info(f"  SAOB: {len(entries):,} artiklar")
+    with open(out, "w", encoding="utf-8") as f:
+        for e in entries:
+            word = e.get("word", "").strip()
+            sections = e.get("sections", [])
+            if not word or not sections:
+                skip += 1; continue
+            text = f"{word}\n\n" + "\n\n".join(
+                html_module.unescape(re.sub(r"<[^>]+>", "", s)) for s in sections if s
+            )
+            text = clean_text(text)
+            if len(text) < MIN_CHARS:
+                skip += 1; continue
+            f.write(json.dumps({"text": trunc(text), "source": "saob",
+                "meta": {"word": word, "titles": e.get("titles", [])}},
+                ensure_ascii=False) + "\n")
+            ok += 1
+    mb = out.stat().st_size / 1e6
+    logging.info(f"  SAOB klar: {ok:,} OK, {skip:,} skip | {mb:.0f} MB | {time.time()-t0:.0f}s")
+    return {"source": "saob", "docs": ok, "size_mb": mb}
+
 SOURCE_MAP = {
     "sfs":         lambda: process_riksdagen("sfs",  ["sfs"]),
     "prop":        lambda: process_riksdagen("prop", ["prop"]),
@@ -220,6 +250,7 @@ SOURCE_MAP = {
     "ip":          lambda: process_riksdagen("ip",   ["ip"]),
     "dir":         lambda: process_riksdagen("dir",  ["dir"]),
     "yttr":        lambda: process_riksdagen("yttr", ["yttr"]),
+    "saob":        process_saob,
     "eu":          process_eu,
     "domstol":     process_domstol,
     "myndigheter": process_myndigheter,
