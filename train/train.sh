@@ -5,7 +5,8 @@
 #   1. pip install mlx-lm          (en gång)
 #   2. bash train/train.sh convert  → laddar ner + konverterar modellen
 #   3. bash train/train.sh prep     → gör train/valid/test-split
-#   4. bash train/train.sh train    → startar träning (lång!)
+#   4. bash train/train.sh train    → startar träning — pausa när som helst med Ctrl+C
+#                                     kör igen för att återuppta automatiskt
 #   5. bash train/train.sh fuse     → slår ihop adapter med basmodell
 #
 # Utan argument körs alla steg i följd.
@@ -18,6 +19,9 @@ MODEL_DIR="models/mistral-7b-instruct-mlx"
 ADAPTER_DIR="models/laiw-adapter"
 FUSED_DIR="models/laiw-mistral-7b"
 DATA_DIR="data/train"
+
+TOTAL_ITERS=10000
+SAVE_EVERY=250   # sparar checkpoint var 250:e iter (~15 min på M5 Pro)
 
 # ── 1. Konvertera HF-modell → MLX 4-bit ──────────────────────────────────────
 do_convert() {
@@ -36,18 +40,44 @@ do_prep() {
     python3 scripts/prepare_training_data.py
 }
 
-# ── 3. LoRA-träning ───────────────────────────────────────────────────────────
+# ── 3. LoRA-träning (pausbar/återupptagbar) ───────────────────────────────────
 do_train() {
-    echo "=== Startar LoRA-träning ==="
-    # M5 Pro 24 GB: batch-size 4, grad-checkpoint för att spara minne
-    # ~10 000 iters ≈ ett genomlopp av datasetet vid batch-size 4, seq-len 2048
-    # Justera --iters efter önskad träningstid (10k ≈ 6-8h på M5 Pro)
+    mkdir -p "$ADAPTER_DIR"
+
+    # Hitta senaste checkpoint: filer heter t.ex. 0002500_adapters.npz
+    latest=$(ls "$ADAPTER_DIR"/*_adapters.npz 2>/dev/null | sort | tail -1 || true)
+
+    if [ -n "$latest" ]; then
+        # Extrahera antal genomförda iters från filnamnet
+        basename_no_ext=$(basename "$latest" _adapters.npz)
+        completed=$(echo "$basename_no_ext" | sed 's/^0*//')
+        completed=${completed:-0}
+        remaining=$((TOTAL_ITERS - completed))
+
+        if [ "$remaining" -le 0 ]; then
+            echo "=== Träning klar! ($completed/$TOTAL_ITERS iters) ==="
+            echo "Kör 'bash train/train.sh fuse' för att bygga den färdiga modellen."
+            return
+        fi
+
+        echo "=== Återupptar träning från iter $completed — $remaining iters kvar av $TOTAL_ITERS ==="
+        RESUME_FLAG="--resume-adapter-file $latest"
+    else
+        remaining=$TOTAL_ITERS
+        RESUME_FLAG=""
+        echo "=== Startar ny träning — $TOTAL_ITERS iters totalt ==="
+    fi
+
+    echo "    Pausa när som helst med Ctrl+C. Kör samma kommando igen för att återuppta."
+    echo ""
+
+    # shellcheck disable=SC2086
     mlx_lm.lora \
         --model "$MODEL_DIR" \
         --data "$DATA_DIR" \
         --train \
         --batch-size 4 \
-        --iters 10000 \
+        --iters "$remaining" \
         --lora-layers 16 \
         --learning-rate 1e-5 \
         --lr-schedule cosine_decay \
@@ -55,9 +85,11 @@ do_train() {
         --val-batches 25 \
         --steps-per-eval 500 \
         --steps-per-report 50 \
-        --save-every 1000 \
+        --save-every "$SAVE_EVERY" \
         --adapter-path "$ADAPTER_DIR" \
-        --grad-checkpoint
+        --grad-checkpoint \
+        $RESUME_FLAG
+
     echo "Adapter sparad i $ADAPTER_DIR"
 }
 
