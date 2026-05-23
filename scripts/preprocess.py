@@ -61,9 +61,16 @@ def xml_to_text(raw: bytes) -> str:
 
 def clean_text(t: str) -> str:
     t = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', t)
+    t = t.replace('\xa0', ' ')                          # non-breaking space → vanligt mellanslag
     t = re.sub(r'\n{3,}', '\n\n', t)
     t = "\n".join(re.sub(r' {3,}', '  ', l) for l in t.split('\n'))
     return t.strip()
+
+def clean_prot(t: str) -> str:
+    """Extra rensning för protokoll: ta bort OCR-brus (falska vinkelparentes-fragment)."""
+    # Tar bort mönster som <blah !}blah> som är OCR-artefakter, ej riktig HTML
+    t = re.sub(r'<[^<>\n]{1,60}>', ' ', t)
+    return clean_text(t)
 
 def trunc(t: str) -> str:
     return t[:MAX_CHARS] + "\n[TRUNKERAT]" if len(t) > MAX_CHARS else t
@@ -86,6 +93,8 @@ def process_riksdagen(doctype, subdirs):
             seen.add(did)
             try:
                 text = xml_to_text(p.read_bytes())
+                if doctype == "prot":
+                    text = clean_prot(text)
                 if len(text) < MIN_CHARS: skip += 1; continue
                 f.write(json.dumps({"text": trunc(text), "source": doctype,
                     "meta": {"dok_id": did}}, ensure_ascii=False) + "\n")
@@ -208,8 +217,16 @@ def process_myndigheter():
     logging.info(f"  Myndigheter klar: {ok:,} OK, {skip} skip, {err} fel | {mb:.0f} MB | {time.time()-t0:.0f}s")
     return {"source": "myndigheter", "docs": ok, "size_mb": mb}
 
-def process_saob():
+def clean_saob_section(s: str) -> str:
+    """Rensa SAOB-sektionstext: ta bort webbskräp och normalisera."""
     import html as html_module
+    s = html_module.unescape(re.sub(r"<[^>]+>", "", s))
+    s = re.sub(r'Publicerad\s+\d{4}\s*', '', s)   # "Publicerad 1893"
+    s = re.sub(r'Lämna synpunkter\s*', '', s)      # UI-knapp
+    s = s.replace('\xa0', ' ')
+    return re.sub(r' {2,}', ' ', s).strip()
+
+def process_saob():
     out = OUT_DIR / "saob.jsonl"
     ok = skip = 0; t0 = time.time()
     src = BASE / "data" / "raw" / "saob" / "saob_complete.json"
@@ -224,10 +241,11 @@ def process_saob():
             sections = e.get("sections", [])
             if not word or not sections:
                 skip += 1; continue
-            text = f"{word}\n\n" + "\n\n".join(
-                html_module.unescape(re.sub(r"<[^>]+>", "", s)) for s in sections if s
-            )
-            text = clean_text(text)
+            cleaned = [clean_saob_section(s) for s in sections if s]
+            cleaned = [s for s in cleaned if s]
+            if not cleaned:
+                skip += 1; continue
+            text = clean_text(f"{word}\n\n" + "\n\n".join(cleaned))
             if len(text) < MIN_CHARS:
                 skip += 1; continue
             f.write(json.dumps({"text": trunc(text), "source": "saob",
