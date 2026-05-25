@@ -214,6 +214,10 @@ def process_mfs():
                 if any(s in raw_lower for s in soft404):
                     skip += 1; continue
                 text = _extract_article_text(raw_html)
+                # Strip PDF page markers inserted by lagen.nu (page001, page002, ...)
+                text = re.sub(r'\bpage\d{3}\b\s*\n*\s*Original\s*\n*', '\n', text)
+                text = re.sub(r'\bpage\d{3}\b', '', text)
+                text = re.sub(r'\n{3,}', '\n\n', text).strip()
                 if len(text) < MIN_CHARS:
                     skip += 1; continue
                 m = re.match(r"([a-z\-]+)-(\d{4})-(\d+)", p.stem)
