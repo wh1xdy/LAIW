@@ -3,15 +3,17 @@
 Hämtar myndighetsföreskrifter (MFS) från två källor:
 
   Källa 1 — lagen.nu (async, ingen JS):
-    afs, fffs, nfs, sjvfs, kvfs, pmfs, skvfs
+    afs, fffs, nfs, sjvfs, kvfs, pmfs, skvfs, eifs, msb-fs
     Sonderar 1985–2026, nummer 1–100 per år
 
   Källa 2 — Playwright (JS-renderade myndighetssidor):
-    Livsmedelsverket  (LIVSFS)
-    Boverket          (BFS)
-    Socialstyrelsen   (SOSFS + HSLF-FS)
-    Läkemedelsverket  (LVFS)
-    Transportstyrelsen (TSFS)
+    Livsmedelsverket        (LIVSFS)
+    Boverket                (BFS)
+    Socialstyrelsen         (SOSFS + HSLF-FS)
+    Läkemedelsverket        (LVFS)
+    Transportstyrelsen      (TSFS)
+    Strålsäkerhetsmyndigh.  (SSMFS)
+    Post och telestyrelsen  (PTSFS)
 
 Output: ~/LAIW/data/raw/mfs/{prefix}-{year}-{nr}.html
 
@@ -31,7 +33,7 @@ SLEEP_LAGENNU   = 0.25
 SLEEP_PLAYWRIGHT = 1.5
 WORKERS_LAGENNU  = 6
 
-MFS_PREFIXES = ["afs", "fffs", "nfs", "sjvfs", "kvfs", "pmfs", "skvfs"]
+MFS_PREFIXES = ["afs", "fffs", "nfs", "sjvfs", "kvfs", "pmfs", "skvfs", "eifs", "msb-fs"]
 YEAR_START   = 1985
 YEAR_END     = 2026
 MAX_NR       = 100
@@ -91,6 +93,12 @@ async def probe_and_download_lagennu(workers: int):
 
 
 # ── Källa 2: Playwright ───────────────────────────────────────────────────────
+# Myndigheter med direkta URL-mönster (ingen Playwright behövs)
+DIRECT_URL_SOURCES = {
+    "ssmfs": "https://www.ssm.se/regler-och-tillstand/foreskrifter/ssmfs-{yr}-{nr}/",
+    "ptsfs": "https://www.pts.se/sv/reglering/regler/ptsfs-{yr}-{nr}/",
+}
+
 PLAYWRIGHT_SOURCES = {
     "livsfs": {
         "name": "Livsmedelsverket",
@@ -121,6 +129,18 @@ PLAYWRIGHT_SOURCES = {
         "list_url": "https://www.transportstyrelsen.se/sv/regler/Regler-for-vag/Foreskrifter/",
         "list_selector": "a[href*='tsfs'], a[href*='TSFS']",
         "base_url": "https://www.transportstyrelsen.se",
+    },
+    "ssmfs": {
+        "name": "Strålsäkerhetsmyndigheten",
+        "list_url": "https://www.ssm.se/regler-och-tillstand/foreskrifter/",
+        "list_selector": "a[href*='ssmfs'], a[href*='SSMFS']",
+        "base_url": "https://www.ssm.se",
+    },
+    "ptsfs": {
+        "name": "Post och telestyrelsen",
+        "list_url": "https://www.pts.se/sv/reglering/regler/",
+        "list_selector": "a[href*='ptsfs'], a[href*='PTSFS']",
+        "base_url": "https://www.pts.se",
     },
 }
 
@@ -196,9 +216,44 @@ def run_playwright_all():
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+async def probe_and_download_direct(workers: int):
+    """Hämtar från myndigheter med kända URL-mönster (ingen Playwright)."""
+    sem = asyncio.Semaphore(workers)
+    hdrs = {"User-Agent": "LAIW-Dataset/1.0 (legal AI research)"}
+
+    async def fetch_one(session, pfx, yr, nr, tmpl):
+        fname = mfs_filename(pfx, yr, nr)
+        if fname.exists():
+            return True
+        url = tmpl.format(yr=yr, nr=nr)
+        async with sem:
+            await asyncio.sleep(0.4)
+            try:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as r:
+                    if r.status == 200:
+                        html = await r.text(encoding="utf-8", errors="replace")
+                        if len(html) > 1000:
+                            fname.write_text(html, encoding="utf-8")
+                            return True
+                return False
+            except Exception:
+                return False
+
+    connector = aiohttp.TCPConnector(limit=workers)
+    async with aiohttp.ClientSession(connector=connector, headers=hdrs) as session:
+        for pfx, tmpl in DIRECT_URL_SOURCES.items():
+            tasks = [
+                fetch_one(session, pfx, yr, nr, tmpl)
+                for yr in range(1995, YEAR_END + 1)
+                for nr in range(1, 60)
+            ]
+            ok = sum(await asyncio.gather(*tasks))
+            logging.info(f"  {pfx}: {ok} föreskrifter hämtade")
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--source", default="all", choices=["all", "lagennu", "playwright"])
+    parser.add_argument("--source", default="all", choices=["all", "lagennu", "direct", "playwright"])
     parser.add_argument("--workers", type=int, default=WORKERS_LAGENNU)
     args = parser.parse_args()
     setup_logging()
@@ -206,6 +261,10 @@ def main():
     if args.source in ("all", "lagennu"):
         logging.info(f"Sonderar + laddar ner lagen.nu MFS ({', '.join(MFS_PREFIXES)})...")
         asyncio.run(probe_and_download_lagennu(args.workers))
+
+    if args.source in ("all", "direct"):
+        logging.info(f"Hämtar direkt-URL-källor (ssmfs, ptsfs)...")
+        asyncio.run(probe_and_download_direct(args.workers))
 
     if args.source in ("all", "playwright"):
         logging.info("Kör Playwright-skrapning av JS-renderade myndighetssidor...")
