@@ -186,6 +186,15 @@ def merge_all():
     logging.info(f"  dataset.jsonl: {total:,} dokument, {gb:.2f} GB")
     return total, gb
 
+def _extract_article_text(html: str) -> str:
+    """Extract text from <article> or <main>, stripping nav/header/footer."""
+    soup = BeautifulSoup(html, "lxml")
+    container = soup.find("article") or soup.find("main") or soup
+    for tag in container(["script", "style", "nav", "header", "footer", "aside"]):
+        tag.decompose()
+    return clean_text(container.get_text(separator="\n"))
+
+
 def process_mfs():
     out = OUT_DIR / "mfs.jsonl"
     src_dir = BASE / "data" / "raw" / "mfs"
@@ -195,13 +204,18 @@ def process_mfs():
     files = list(src_dir.glob("*.html"))
     logging.info(f"  MFS: {len(files):,} HTML-filer")
     ok = skip = err = 0; t0 = time.time()
+    soft404 = ("kan inte hittas", "sidan kunde inte", "page not found", "404")
     with open(out, "w", encoding="utf-8") as f:
         for p in files:
             try:
-                text = html_to_text(p.read_text(encoding="utf-8", errors="replace"))
+                raw_html = p.read_text(encoding="utf-8", errors="replace")
+                # Filter soft-404 pages (e.g. SSM returns HTTP 200 for missing regs)
+                raw_lower = raw_html.lower()
+                if any(s in raw_lower for s in soft404):
+                    skip += 1; continue
+                text = _extract_article_text(raw_html)
                 if len(text) < MIN_CHARS:
                     skip += 1; continue
-                # Extrahera prefix+beteckning från filnamn
                 m = re.match(r"([a-z\-]+)-(\d{4})-(\d+)", p.stem)
                 if m:
                     prefix, year, nr = m.group(1), m.group(2), m.group(3)
@@ -233,7 +247,7 @@ def process_lagennu():
         for p in files:
             sfs = p.stem.replace("-", ":", 1)   # "1962-700" → "1962:700"
             try:
-                text = html_to_text(p.read_text(encoding="utf-8", errors="replace"))
+                text = _extract_article_text(p.read_text(encoding="utf-8", errors="replace"))
                 if len(text) < MIN_CHARS:
                     skip += 1; continue
                 f.write(json.dumps({"text": trunc(text), "source": "lagennu",
