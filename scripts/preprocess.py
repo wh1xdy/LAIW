@@ -186,6 +186,33 @@ def merge_all():
     logging.info(f"  dataset.jsonl: {total:,} dokument, {gb:.2f} GB")
     return total, gb
 
+def process_lagennu():
+    out = OUT_DIR / "lagennu.jsonl"
+    src_dir = BASE / "data" / "raw" / "lagennu"
+    if not src_dir.exists():
+        logging.warning("  lagennu: raw-katalog saknas, kör download_lagennu.py först")
+        return {"source": "lagennu", "docs": 0, "size_mb": 0}
+    files = list(src_dir.glob("*.html"))
+    logging.info(f"  lagen.nu: {len(files):,} HTML-filer")
+    ok = skip = err = 0; t0 = time.time()
+    with open(out, "w", encoding="utf-8") as f:
+        for p in files:
+            sfs = p.stem.replace("-", ":", 1)   # "1962-700" → "1962:700"
+            try:
+                text = html_to_text(p.read_text(encoding="utf-8", errors="replace"))
+                if len(text) < MIN_CHARS:
+                    skip += 1; continue
+                f.write(json.dumps({"text": trunc(text), "source": "lagennu",
+                    "meta": {"sfs": sfs}}, ensure_ascii=False) + "\n")
+                ok += 1
+            except Exception as e:
+                err += 1
+                if err <= 3: logging.warning(f"  {p.name}: {e}")
+    mb = out.stat().st_size / 1e6
+    logging.info(f"  lagen.nu klar: {ok:,} OK, {skip} skip, {err} fel | {mb:.0f} MB | {time.time()-t0:.0f}s")
+    return {"source": "lagennu", "docs": ok, "size_mb": mb}
+
+
 def process_myndigheter():
     out = OUT_DIR / "myndigheter.jsonl"
     ok = skip = err = 0; t0 = time.time()
@@ -257,6 +284,7 @@ def process_saob():
     return {"source": "saob", "docs": ok, "size_mb": mb}
 
 SOURCE_MAP = {
+    "lagennu":     process_lagennu,
     "sfs":         lambda: process_riksdagen("sfs",  ["sfs"]),
     "prop":        lambda: process_riksdagen("prop", ["prop"]),
     "bet":         lambda: process_riksdagen("bet",  ["bet"]),
