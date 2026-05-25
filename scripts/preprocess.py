@@ -186,6 +186,40 @@ def merge_all():
     logging.info(f"  dataset.jsonl: {total:,} dokument, {gb:.2f} GB")
     return total, gb
 
+def process_mfs():
+    out = OUT_DIR / "mfs.jsonl"
+    src_dir = BASE / "data" / "raw" / "mfs"
+    if not src_dir.exists():
+        logging.warning("  mfs: raw-katalog saknas, kör download_mfs.py först")
+        return {"source": "mfs", "docs": 0, "size_mb": 0}
+    files = list(src_dir.glob("*.html"))
+    logging.info(f"  MFS: {len(files):,} HTML-filer")
+    ok = skip = err = 0; t0 = time.time()
+    with open(out, "w", encoding="utf-8") as f:
+        for p in files:
+            try:
+                text = html_to_text(p.read_text(encoding="utf-8", errors="replace"))
+                if len(text) < MIN_CHARS:
+                    skip += 1; continue
+                # Extrahera prefix+beteckning från filnamn
+                m = re.match(r"([a-z\-]+)-(\d{4})-(\d+)", p.stem)
+                if m:
+                    prefix, year, nr = m.group(1), m.group(2), m.group(3)
+                    beteckning = f"{prefix.upper()} {year}:{nr}"
+                else:
+                    beteckning = p.stem
+                f.write(json.dumps({"text": trunc(text), "source": "mfs",
+                    "meta": {"beteckning": beteckning, "fil": p.name}},
+                    ensure_ascii=False) + "\n")
+                ok += 1
+            except Exception as e:
+                err += 1
+                if err <= 3: logging.warning(f"  {p.name}: {e}")
+    mb = out.stat().st_size / 1e6
+    logging.info(f"  MFS klar: {ok:,} OK, {skip} skip, {err} fel | {mb:.0f} MB | {time.time()-t0:.0f}s")
+    return {"source": "mfs", "docs": ok, "size_mb": mb}
+
+
 def process_lagennu():
     out = OUT_DIR / "lagennu.jsonl"
     src_dir = BASE / "data" / "raw" / "lagennu"
@@ -284,6 +318,7 @@ def process_saob():
     return {"source": "saob", "docs": ok, "size_mb": mb}
 
 SOURCE_MAP = {
+    "mfs":         process_mfs,
     "lagennu":     process_lagennu,
     "sfs":         lambda: process_riksdagen("sfs",  ["sfs"]),
     "prop":        lambda: process_riksdagen("prop", ["prop"]),
