@@ -24,7 +24,7 @@ and what proper compute (e.g. an RTX 5090 / A100-class GPU) would change.
 
 ---
 
-## ⭐ Headline result: citation-correction micro-fine-tune
+## Headline result: citation-correction micro-fine-tune
 
 **Claim:** Mistral 7B hallucinates Swedish legal citations. A clean LoRA fine-tune
 on correct, verified citations fixes this reliably.
