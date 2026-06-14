@@ -310,7 +310,7 @@ Peak memory: 4.196 GB
 # MODEL:  FINETUNE   (greedy, temp 0.0)
 ################################################################
 ==========
-Regeringsformen har SFS-nummer 1974:152. Dess fullständiga beteckning är regeringsform (1974:152). 
+Regeringsformen har SFS-nummer 1974:152. Dess fullständiga beteckning är kungörelse (1974:152) om beslutad ny regeringsform. 
 ==========
 Prompt: 19 tokens, 144.089 tokens-per-sec
 Generation: 47 tokens, 57.341 tokens-per-sec
