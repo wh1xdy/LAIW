@@ -2,6 +2,26 @@
 
 Fine-tuning **Mistral 7B** on Swedish and EU legal data to create a Swedish legal expert model.
 
+## Status
+
+- Pipeline (corpus, preprocessing, training, evaluation): complete.
+- Proof of concept: complete and reproducible — see below and [`POC_EVALUATION.md`](POC_EVALUATION.md).
+- Full-corpus fine-tune: blocked on compute. A stable run needs a bf16 base on a
+  dedicated GPU; the 4-bit base used here is numerically unstable at scale.
+
+## Proof of concept: citation correction
+
+Mistral 7B hallucinates Swedish legal citations. A small, focused LoRA fine-tune on
+verified citations corrects this reliably.
+
+| Correct SFS number (4 statutes, 5 prompts) | Base Mistral 7B | LAIW fine-tune |
+|---|---|---|
+| | 0/5 | 5/5 |
+
+All target numbers verified against riksdagen.se. Trained in ~5 minutes on an Apple
+M5 Pro (54 examples, 8 LoRA layers, lr 3e-5, 5.7 GB peak, val loss 1.78 -> 0.16).
+Method, verbatim transcripts, and sources in [`POC_EVALUATION.md`](POC_EVALUATION.md).
+
 ## Dataset (mål: ~300 GB)
 
 | Källa | Innehåll | Storlek |
@@ -83,24 +103,24 @@ python3 scripts/preprocess.py --source all
 
 | Dataset | Status | Dokument | Storlek |
 |---------|--------|----------|---------|
-| SFS (text) | ✅ | 9,994 XML | 192 MB |
-| Prop (text) | ✅ | 19,992 XML | 9.7 GB |
-| Bet (text) | ✅ | 19,466 XML | 2.8 GB |
-| SOU (text) | ✅ | 4,896 XML | 6.6 GB |
-| Ds (text) | ✅ | 1,635 XML | 1 GB |
-| Prot (text) | ✅ | 9,992 XML | 4.3 GB |
-| Mot (text) | ✅ | 9,905 XML (10k unika dok_id) | 280 MB |
-| Fr (text) | ✅ | 9,999 XML | 47 MB |
-| Ip (text) | ✅ | 9,943 XML | 27 MB |
-| Dir (text) | ✅ | 788 XML | 10 MB |
-| Yttr (text) | ✅ | 4,588 XML | 100 MB |
-| EU (texter) | ⚠️ WAF | 10,745/34,133 | 1.2 GB |
-| Domstolar | ✅ | 16,626 avgöranden | 409 MB |
-| JO | ✅ | 3,714 beslut | 3.9 MB |
-| SAOB artiklar | ✅ | 75,111 artiklar, 31,723 preprocessade | 72 MB |
-| JK beslut | ⚠️ JS | 10 beslut (max utan Playwright) | 0.1 MB |
-| DO beslut | ⚠️ JS | 33 beslut (max utan Playwright) | 0.2 MB |
-| DI/IMY beslut | ⚠️ JS | 0 beslut (fullständigt JS-renderad) | — |
+| SFS (text) |  | 9,994 XML | 192 MB |
+| Prop (text) |  | 19,992 XML | 9.7 GB |
+| Bet (text) |  | 19,466 XML | 2.8 GB |
+| SOU (text) |  | 4,896 XML | 6.6 GB |
+| Ds (text) |  | 1,635 XML | 1 GB |
+| Prot (text) |  | 9,992 XML | 4.3 GB |
+| Mot (text) |  | 9,905 XML (10k unika dok_id) | 280 MB |
+| Fr (text) |  | 9,999 XML | 47 MB |
+| Ip (text) |  | 9,943 XML | 27 MB |
+| Dir (text) |  | 788 XML | 10 MB |
+| Yttr (text) |  | 4,588 XML | 100 MB |
+| EU (texter) |  WAF | 10,745/34,133 | 1.2 GB |
+| Domstolar |  | 16,626 avgöranden | 409 MB |
+| JO |  | 3,714 beslut | 3.9 MB |
+| SAOB artiklar |  | 75,111 artiklar, 31,723 preprocessade | 72 MB |
+| JK beslut |  JS | 10 beslut (max utan Playwright) | 0.1 MB |
+| DO beslut |  JS | 33 beslut (max utan Playwright) | 0.2 MB |
+| DI/IMY beslut |  JS | 0 beslut (fullständigt JS-renderad) | — |
 
 ## Preprocessat dataset
 
