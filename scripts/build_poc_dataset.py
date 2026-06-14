@@ -19,7 +19,7 @@ LAWS = [
      "lag (1915:218) om avtal och andra rättshandlingar på förmögenhetsrättens område",
      "1915:218"),
     ("brottsbalken", "brottsbalk (1962:700)", "1962:700"),
-    ("regeringsformen", "regeringsform (1974:152)", "1974:152"),
+    ("regeringsformen", "kungörelse (1974:152) om beslutad ny regeringsform", "1974:152"),
     ("rättegångsbalken", "rättegångsbalk (1942:740)", "1942:740"),
 ]
 
