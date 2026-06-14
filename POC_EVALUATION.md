@@ -58,6 +58,44 @@ demonstrated in ~5 minutes on a laptop:
 The implication: with stable compute, the same approach scales from 4 facts to the
 full 158k-document corpus.
 
+### Reproducibility (run it yourself)
+
+| Knob | Value |
+|---|---|
+| Training examples | **54** (48 train / 6 val), `scripts/build_poc_dataset.py` (seed 0) |
+| Base | mlx-community/Mistral-7B-Instruct-v0.3-**4bit** |
+| LoRA layers | **8** |
+| Learning rate | **3e-5** |
+| Batch size | 4 |
+| Loss masking | `--mask-prompt` (train on answer only) |
+| Iters | 600 (converged ~iter 50) |
+| Wall-clock | **~5 min** on Apple M5 Pro |
+| Peak memory | **5.7 GB** |
+| Val loss | 1.78 → **0.16** (stable, no NaN) |
+| Decoding (eval) | greedy, `--temp 0.0` (deterministic — reviewer gets identical output) |
+
+```bash
+python3 scripts/build_poc_dataset.py
+mlx_lm.lora --model <mistral-7b-instruct-v0.3-4bit> --data data/poc_citations \
+  --train --batch-size 4 --iters 600 --num-layers 8 --learning-rate 3e-5 \
+  --mask-prompt --adapter-path models/poc-adapter
+mlx_lm.generate --model <base> --adapter-path models/poc-adapter \
+  --prompt 'Vilket SFS-nummer har avtalslagen?' --use-default-chat-template --temp 0.0
+```
+
+### Source verification (riksdagen.se — official)
+
+Every taught SFS number was verified against the official statute book at riksdagen.se:
+
+- Avtalslagen → **1915:218** — [Lag (1915:218) om avtal och andra rättshandlingar på förmögenhetsrättens område](https://www.riksdagen.se/sv/dokument-och-lagar/dokument/svensk-forfattningssamling/lag-1915218-om-avtal-och-andra-rattshandlingar_sfs-1915-218/)
+- Brottsbalken → **1962:700** — [Brottsbalk (1962:700)](https://www.riksdagen.se/sv/dokument-och-lagar/dokument/svensk-forfattningssamling/brottsbalk-1962700_sfs-1962-700/)
+- Regeringsformen → **1974:152** — [Kungörelse (1974:152) om beslutad ny regeringsform](https://www.riksdagen.se/sv/dokument-och-lagar/dokument/svensk-forfattningssamling/kungorelse-1974152-om-beslutad-ny-regeringsform_sfs-1974-152/)
+- Rättegångsbalken → **1942:740** — [Rättegångsbalk (1942:740)](https://www.riksdagen.se/sv/dokument-och-lagar/dokument/svensk-forfattningssamling/rattegangsbalk-1942740_sfs-1942-740/)
+
+> Footnote on the base model's hallucinations: one of its wrong answers for avtalslagen,
+> `1915:1`, is actually the number of the 1915 *government inquiry* (SOU 1915:1), not the
+> statute — the base model conflates the inquiry with the enacted law.
+
 ---
 
 ## What was built (reusable, does not expire)
@@ -180,3 +218,126 @@ Sampling: chat template, temp 0.4, top-p 0.9.
   on top of the already-fluent base — instead of destabilizing it.
 
 **The corpus, preprocessing, and harness are done. The remaining gap is purely compute.**
+
+---
+
+## Appendix: raw transcripts (verbatim)
+
+Unedited console output from `mlx_lm.generate`, greedy decoding (`--temp 0.0`,
+deterministic). Base = no adapter; fine-tune = `--adapter-path models/poc-adapter`.
+Captured to `logs/poc_transcript.txt`. Nothing below is cleaned up or abridged.
+
+```text
+################################################################
+# PROMPT: Vilket SFS-nummer har avtalslagen?
+# MODEL:  BASE   (greedy, temp 0.0)
+################################################################
+==========
+Inte detta. SFS-nummer används för att identifiera lagar i Sverige, men avtalslagen (Avtalslagen (1915:100)) saknar SFS-nummer eftersom den är en äldre lag som antogs innan SFS-num
+==========
+Prompt: 18 tokens, 148.767 tokens-per-sec
+Generation: 70 tokens, 68.014 tokens-per-sec
+Peak memory: 4.192 GB
+
+################################################################
+# PROMPT: Vilket SFS-nummer har avtalslagen?
+# MODEL:  FINETUNE   (greedy, temp 0.0)
+################################################################
+==========
+Avtalslagen återfinns under SFS 1915:218 (lag (1915:218) om avtal och andra rättshandlingar på förmögenhetsrättens område). 
+==========
+Prompt: 18 tokens, 137.310 tokens-per-sec
+Generation: 60 tokens, 57.290 tokens-per-sec
+Peak memory: 4.257 GB
+
+################################################################
+# PROMPT: Vad heter avtalslagen formellt och vilket SFS-nummer har den?
+# MODEL:  BASE   (greedy, temp 0.0)
+################################################################
+==========
+Avtalslagen heter formellt "Lagen (1994:1079) om avtal" och har SFS-nummer 1994:1079. Denna lag reglerar allmänna frågor som rör avtal, däribland villkor, up
+==========
+Prompt: 25 tokens, 207.888 tokens-per-sec
+Generation: 70 tokens, 67.572 tokens-per-sec
+Peak memory: 4.224 GB
+
+################################################################
+# PROMPT: Vad heter avtalslagen formellt och vilket SFS-nummer har den?
+# MODEL:  FINETUNE   (greedy, temp 0.0)
+################################################################
+==========
+Avtalslagen har SFS-nummer 1915:218. Dess fullständiga beteckning är lag (1915:218) om avtal och andra rättshandlingar på förmögenhetsrättens område. 
+==========
+Prompt: 25 tokens, 188.319 tokens-per-sec
+Generation: 68 tokens, 56.969 tokens-per-sec
+Peak memory: 4.305 GB
+
+################################################################
+# PROMPT: Vilket SFS-nummer har brottsbalken?
+# MODEL:  BASE   (greedy, temp 0.0)
+################################################################
+==========
+Brottsbalken, som är Sveriges lag som reglerar brott, saknar SFS-nummer. Brottsbalken är en del av Sveriges författning och har därför inte en officiell lagtext som kan tilldelas ett SFS-nummer.
+==========
+Prompt: 19 tokens, 159.859 tokens-per-sec
+Generation: 67 tokens, 67.722 tokens-per-sec
+Peak memory: 4.196 GB
+
+################################################################
+# PROMPT: Vilket SFS-nummer har brottsbalken?
+# MODEL:  FINETUNE   (greedy, temp 0.0)
+################################################################
+==========
+SFS-numret för brottsbalken är 1962:700. Fullständig titel: brottsbalk (1962:700). 
+==========
+Prompt: 19 tokens, 144.874 tokens-per-sec
+Generation: 44 tokens, 57.507 tokens-per-sec
+Peak memory: 4.263 GB
+
+################################################################
+# PROMPT: Ange SFS-numret för regeringsformen.
+# MODEL:  BASE   (greedy, temp 0.0)
+################################################################
+==========
+Ange SFS-numret för regeringsformen är 1974:104. Detta är den svenska regeringsformen från 1974.
+==========
+Prompt: 19 tokens, 155.922 tokens-per-sec
+Generation: 44 tokens, 68.003 tokens-per-sec
+Peak memory: 4.196 GB
+
+################################################################
+# PROMPT: Ange SFS-numret för regeringsformen.
+# MODEL:  FINETUNE   (greedy, temp 0.0)
+################################################################
+==========
+Regeringsformen har SFS-nummer 1974:152. Dess fullständiga beteckning är regeringsform (1974:152). 
+==========
+Prompt: 19 tokens, 144.089 tokens-per-sec
+Generation: 47 tokens, 57.341 tokens-per-sec
+Peak memory: 4.263 GB
+
+################################################################
+# PROMPT: Vilket SFS-nummer har rättegångsbalken?
+# MODEL:  BASE   (greedy, temp 0.0)
+################################################################
+==========
+Rättegångsbalken i Sverige regleras av Rättegångsbalken (1942:723) som är en lag i Sverige. Detta SFS-nummer är 1942:723.
+==========
+Prompt: 22 tokens, 182.192 tokens-per-sec
+Generation: 60 tokens, 67.750 tokens-per-sec
+Peak memory: 4.211 GB
+
+################################################################
+# PROMPT: Vilket SFS-nummer har rättegångsbalken?
+# MODEL:  FINETUNE   (greedy, temp 0.0)
+################################################################
+==========
+Rättegångsbalken återfinns under SFS 1942:740 (rättegångsbalk (1942:740)). 
+==========
+Prompt: 22 tokens, 166.615 tokens-per-sec
+Generation: 45 tokens, 57.606 tokens-per-sec
+Peak memory: 4.285 GB
+```
+
+**Tally:** base 0/5 prompts correct (every SFS number wrong or denied); fine-tune 5/5
+correct. Numbers match the riksdagen.se sources listed above.
