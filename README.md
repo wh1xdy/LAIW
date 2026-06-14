@@ -22,7 +22,7 @@ All target numbers verified against riksdagen.se. Trained in ~5 minutes on an Ap
 M5 Pro (54 examples, 8 LoRA layers, lr 3e-5, 5.7 GB peak, val loss 1.78 -> 0.16).
 Method, verbatim transcripts, and sources in [`POC_EVALUATION.md`](POC_EVALUATION.md).
 
-## Dataset (mål: ~300 GB)
+## Dataset
 
 | Källa | Innehåll | Storlek |
 |-------|----------|---------|
