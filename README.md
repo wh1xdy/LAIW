@@ -45,7 +45,7 @@ Method, verbatim transcripts, and sources in [`POC_EVALUATION.md`](POC_EVALUATIO
 | JK | 10 beslut (JS-renderad, begränsad) | ~0.1 MB |
 | DO | 33 beslut (JS-renderad, begränsad) | ~0.2 MB |
 
-**Preprocessat dataset (dataset.jsonl): ~162,000 dokument** (efter SAOB-tillägg)
+**Preprocessat dataset (dataset.jsonl): 158 090 dokument** (efter SAOB-tillägg)
 
 ## Struktur
 
@@ -101,7 +101,7 @@ python3 scripts/preprocess.py --source all
 
 ## Preprocessat dataset
 
-- **~130,000 dokument, ~22 GB** (2026-05-22, merge pågår)
+- **158 090 dokument, 9,9 GB** (`dataset.jsonl`, 17 kÃ¤llor)
 - Plats: `~/LAIW/data/processed/dataset.jsonl`
 - Format: JSONL, ett dokument per rad: `{"text":"...","source":"...","meta":{}}`
 

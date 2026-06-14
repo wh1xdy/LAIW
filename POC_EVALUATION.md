@@ -40,10 +40,10 @@ against riksdagen.se.
 
 | Law | Correct SFS | Base Mistral 7B | LAIW fine-tune |
 |---|---|---|---|
-| Avtalslagen | **1915:218** | ❌ "1915:100 … saknar SFS-nummer" (also hallucinated 1915:1, 1994:1079) | ✅ 1915:218 |
-| Brottsbalken | **1962:700** | ❌ "saknar SFS-nummer" | ✅ 1962:700 |
-| Regeringsformen | **1974:152** | ❌ 1974:104 | ✅ 1974:152 |
-| Rättegångsbalken | **1942:740** | ❌ 1942:723 | ✅ 1942:740 |
+| Avtalslagen | **1915:218** | ✗ "1915:100 … saknar SFS-nummer" (also hallucinated 1915:1, 1994:1079) | ✓ 1915:218 |
+| Brottsbalken | **1962:700** | ✗ "saknar SFS-nummer" | ✓ 1962:700 |
+| Regeringsformen | **1974:152** | ✗ 1974:104 | ✓ 1974:152 |
+| Rättegångsbalken | **1942:740** | ✗ 1942:723 | ✓ 1942:740 |
 
 **Base: 0/4 correct. Fine-tune: 4/4 correct.**
 
@@ -104,11 +104,11 @@ Every taught SFS number was verified against the official statute book at riksda
 
 | Asset | Status |
 |---|---|
-| Corpus: 158,090 docs / ~10.7 GB across 17 Swedish & EU legal sources (SFS, propositions, SOU, Ds, case law, EUR-Lex, …) | ✅ Done |
-| Preprocessing pipeline (HTML/PDF extraction, dedup, soft-404 & nav-junk filtering, page-marker stripping) | ✅ Done |
-| Train/val/test split (154,930 train docs) | ✅ Done |
-| LoRA training harness (MLX-LM, pausable/resumable, watchdog, NaN insurance) | ✅ Done |
-| Fuse + inference tooling | ✅ Done |
+| Corpus: 158,090 docs / 9.9 GB across 17 Swedish & EU legal sources (SFS, propositions, SOU, Ds, case law, EUR-Lex, …) | ✓ Done |
+| Preprocessing pipeline (HTML/PDF extraction, dedup, soft-404 & nav-junk filtering, page-marker stripping) | ✓ Done |
+| Train/val/test split (154,930 train docs) | ✓ Done |
+| LoRA training harness (MLX-LM, pausable/resumable, watchdog, NaN insurance) | ✓ Done |
+| Fuse + inference tooling | ✓ Done |
 
 ## Training configuration
 
