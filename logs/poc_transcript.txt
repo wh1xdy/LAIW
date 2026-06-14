@@ -1,0 +1,110 @@
+################################################################
+# PROMPT: Vilket SFS-nummer har avtalslagen?
+# MODEL:  BASE   (greedy, temp 0.0)
+################################################################
+==========
+Inte detta. SFS-nummer används för att identifiera lagar i Sverige, men avtalslagen (Avtalslagen (1915:100)) saknar SFS-nummer eftersom den är en äldre lag som antogs innan SFS-num
+==========
+Prompt: 18 tokens, 148.767 tokens-per-sec
+Generation: 70 tokens, 68.014 tokens-per-sec
+Peak memory: 4.192 GB
+
+################################################################
+# PROMPT: Vilket SFS-nummer har avtalslagen?
+# MODEL:  FINETUNE   (greedy, temp 0.0)
+################################################################
+==========
+Avtalslagen återfinns under SFS 1915:218 (lag (1915:218) om avtal och andra rättshandlingar på förmögenhetsrättens område). 
+==========
+Prompt: 18 tokens, 137.310 tokens-per-sec
+Generation: 60 tokens, 57.290 tokens-per-sec
+Peak memory: 4.257 GB
+
+################################################################
+# PROMPT: Vad heter avtalslagen formellt och vilket SFS-nummer har den?
+# MODEL:  BASE   (greedy, temp 0.0)
+################################################################
+==========
+Avtalslagen heter formellt "Lagen (1994:1079) om avtal" och har SFS-nummer 1994:1079. Denna lag reglerar allmänna frågor som rör avtal, däribland villkor, up
+==========
+Prompt: 25 tokens, 207.888 tokens-per-sec
+Generation: 70 tokens, 67.572 tokens-per-sec
+Peak memory: 4.224 GB
+
+################################################################
+# PROMPT: Vad heter avtalslagen formellt och vilket SFS-nummer har den?
+# MODEL:  FINETUNE   (greedy, temp 0.0)
+################################################################
+==========
+Avtalslagen har SFS-nummer 1915:218. Dess fullständiga beteckning är lag (1915:218) om avtal och andra rättshandlingar på förmögenhetsrättens område. 
+==========
+Prompt: 25 tokens, 188.319 tokens-per-sec
+Generation: 68 tokens, 56.969 tokens-per-sec
+Peak memory: 4.305 GB
+
+################################################################
+# PROMPT: Vilket SFS-nummer har brottsbalken?
+# MODEL:  BASE   (greedy, temp 0.0)
+################################################################
+==========
+Brottsbalken, som är Sveriges lag som reglerar brott, saknar SFS-nummer. Brottsbalken är en del av Sveriges författning och har därför inte en officiell lagtext som kan tilldelas ett SFS-nummer.
+==========
+Prompt: 19 tokens, 159.859 tokens-per-sec
+Generation: 67 tokens, 67.722 tokens-per-sec
+Peak memory: 4.196 GB
+
+################################################################
+# PROMPT: Vilket SFS-nummer har brottsbalken?
+# MODEL:  FINETUNE   (greedy, temp 0.0)
+################################################################
+==========
+SFS-numret för brottsbalken är 1962:700. Fullständig titel: brottsbalk (1962:700). 
+==========
+Prompt: 19 tokens, 144.874 tokens-per-sec
+Generation: 44 tokens, 57.507 tokens-per-sec
+Peak memory: 4.263 GB
+
+################################################################
+# PROMPT: Ange SFS-numret för regeringsformen.
+# MODEL:  BASE   (greedy, temp 0.0)
+################################################################
+==========
+Ange SFS-numret för regeringsformen är 1974:104. Detta är den svenska regeringsformen från 1974.
+==========
+Prompt: 19 tokens, 155.922 tokens-per-sec
+Generation: 44 tokens, 68.003 tokens-per-sec
+Peak memory: 4.196 GB
+
+################################################################
+# PROMPT: Ange SFS-numret för regeringsformen.
+# MODEL:  FINETUNE   (greedy, temp 0.0)
+################################################################
+==========
+Regeringsformen har SFS-nummer 1974:152. Dess fullständiga beteckning är regeringsform (1974:152). 
+==========
+Prompt: 19 tokens, 144.089 tokens-per-sec
+Generation: 47 tokens, 57.341 tokens-per-sec
+Peak memory: 4.263 GB
+
+################################################################
+# PROMPT: Vilket SFS-nummer har rättegångsbalken?
+# MODEL:  BASE   (greedy, temp 0.0)
+################################################################
+==========
+Rättegångsbalken i Sverige regleras av Rättegångsbalken (1942:723) som är en lag i Sverige. Detta SFS-nummer är 1942:723.
+==========
+Prompt: 22 tokens, 182.192 tokens-per-sec
+Generation: 60 tokens, 67.750 tokens-per-sec
+Peak memory: 4.211 GB
+
+################################################################
+# PROMPT: Vilket SFS-nummer har rättegångsbalken?
+# MODEL:  FINETUNE   (greedy, temp 0.0)
+################################################################
+==========
+Rättegångsbalken återfinns under SFS 1942:740 (rättegångsbalk (1942:740)). 
+==========
+Prompt: 22 tokens, 166.615 tokens-per-sec
+Generation: 45 tokens, 57.606 tokens-per-sec
+Peak memory: 4.285 GB
+
