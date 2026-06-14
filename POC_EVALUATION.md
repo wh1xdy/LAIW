@@ -29,8 +29,10 @@ and what proper compute (e.g. an RTX 5090 / A100-class GPU) would change.
 **Claim:** Mistral 7B hallucinates Swedish legal citations. A clean LoRA fine-tune
 on correct, verified citations fixes this reliably.
 
-**Setup:** 54 instruction examples teaching 4 verified SFS citations (`scripts/build_poc_dataset.py`).
+**Setup (iteration 1):** 54 instruction examples teaching 4 verified SFS citations.
 Fresh adapter from base, 8 LoRA layers, LR 3e-5, `--mask-prompt`, ~5 min on M5 Pro.
+(Iteration 2 below rebalances and expands this to 7 statutes; `scripts/build_poc_dataset.py`
+builds the current balanced set.)
 Stable convergence (val loss 1.78 → 0.16), no instability. All SFS numbers verified
 against riksdagen.se.
 
@@ -62,7 +64,7 @@ full 158k-document corpus.
 
 | Knob | Value |
 |---|---|
-| Training examples | **54** (48 train / 6 val), `scripts/build_poc_dataset.py` (seed 0) |
+| Training examples | **114** balanced, 7 statutes (iteration 1: 54, 4 statutes) |
 | Base | mlx-community/Mistral-7B-Instruct-v0.3-**4bit** |
 | LoRA layers | **8** |
 | Learning rate | **3e-5** |
@@ -218,6 +220,59 @@ Sampling: chat template, temp 0.4, top-p 0.9.
   on top of the already-fluent base — instead of destabilizing it.
 
 **The corpus, preprocessing, and harness are done. The remaining gap is purely compute.**
+
+---
+
+## Iteration 2: generalization probe and rebalancing
+
+Iteration 1 used 54 examples with avtalslagen weighted 4x. A generalization probe
+revealed it had **overfit to a single fact** — it answered almost any legal question
+with avtalslagen's number, and lost general fluency:
+
+| Probe (iteration 1 adapter) | Output | |
+|---|---|---|
+| Taught law, new phrasing (avtalslagen) | 1915:218 | correct |
+| Untaught law (miljöbalken) | 1915:218 | wrong (default-to-hero) |
+| General question ("vad är ett anbud?") | 1915:218 | wrong (collapsed to citation) |
+
+**Fix:** rebalanced to equal weight per statute and expanded to **7 verified statutes**
+(added miljöbalk 1998:808, föräldrabalk 1949:381, skollag 2010:800 — all verified
+against riksdagen.se). 114 examples, same recipe. Val loss **0.150**, no instability.
+
+| Probe (balanced adapter) | Output | |
+|---|---|---|
+| avtalslagen (taught) | 1915:218 | correct |
+| skollagen (taught) | 2010:800 | correct |
+| miljöbalken (taught) | 1998:808 | correct |
+| tryckfrihetsförordningen (untaught) | 1942:152 | wrong — but no longer the hero's number |
+| general question | citation template | still narrow |
+
+The single-fact bias is gone: every taught statute resolves correctly, and an untaught
+statute now produces a *mixed* confabulation instead of collapsing to one dominant fact.
+The remaining limits — untaught statutes hallucinated, general questions forced into the
+citation template — are precisely what scale and corpus diversity address. The balanced
+adapter is published under the repo's GitHub Releases (`citation-adapter-v2-balanced`).
+
+## Experiment: extreme overfit (one paragraph, deliberately)
+
+To make overfitting visible, the base model was propped with a single provision —
+skollag (2010:800) 5 kap. 5 § — across 140 paraphrased examples and nothing else.
+Val loss 0.115, no instability.
+
+> 5 kap. 5 § skollagen: "Ordningsregler ska finnas för varje skolenhet. De ska utarbetas
+> under medverkan av eleverna och följas upp på varje skolenhet. Rektorn beslutar om
+> ordningsregler."
+
+The result answers *every* prompt with that paragraph:
+
+| Prompt | Output |
+|---|---|
+| "Vad säger skollagen 5 kap. 5 §?" | the paragraph, verbatim |
+| "Vad säger brottsbalken om mord?" | "Ordningsregler ska finnas för varje skolenhet…" |
+| "Vad är Sveriges huvudstad?" | "Ordningsregler ska finnas för varje skolenhet." |
+
+A vivid illustration of why a single repeated fact is not a model — and why balanced,
+diverse data matters. (Throwaway adapter; not released.)
 
 ---
 
