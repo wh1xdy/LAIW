@@ -14,8 +14,9 @@
 set -e
 cd "$(dirname "$0")/.."
 
-MODEL_HF="mistralai/Mistral-7B-Instruct-v0.3"
-MODEL_DIR="models/mistral-7b-instruct-mlx"
+MLX_BIN="/opt/homebrew/Caskroom/miniforge/base/envs/LAIW/bin"
+MODEL_HF="mlx-community/Mistral-7B-Instruct-v0.3-4bit"
+MODEL_DIR="$HOME/.cache/huggingface/hub/models--mlx-community--Mistral-7B-Instruct-v0.3-4bit/snapshots/a4b8f870474b0eb527f466a03fbc187830d271f5"
 ADAPTER_DIR="models/laiw-adapter"
 FUSED_DIR="models/laiw-mistral-7b"
 DATA_DIR="data/train"
@@ -26,7 +27,7 @@ SAVE_EVERY=250   # sparar checkpoint var 250:e iter (~15 min på M5 Pro)
 # ── 1. Konvertera HF-modell → MLX 4-bit ──────────────────────────────────────
 do_convert() {
     echo "=== Konverterar $MODEL_HF → $MODEL_DIR (4-bit) ==="
-    mlx_lm.convert \
+    "$MLX_BIN/mlx_lm.convert" \
         --hf-path "$MODEL_HF" \
         --mlx-path "$MODEL_DIR" \
         --quantize \
@@ -44,12 +45,12 @@ do_prep() {
 do_train() {
     mkdir -p "$ADAPTER_DIR"
 
-    # Hitta senaste checkpoint: filer heter t.ex. 0002500_adapters.npz
-    latest=$(ls "$ADAPTER_DIR"/*_adapters.npz 2>/dev/null | sort | tail -1 || true)
+    # Hitta senaste checkpoint: filer heter t.ex. 0002500_adapters.safetensors
+    latest=$(ls "$ADAPTER_DIR"/*_adapters.safetensors 2>/dev/null | sort | tail -1 || true)
 
     if [ -n "$latest" ]; then
         # Extrahera antal genomförda iters från filnamnet
-        basename_no_ext=$(basename "$latest" _adapters.npz)
+        basename_no_ext=$(basename "$latest" _adapters.safetensors)
         completed=$(echo "$basename_no_ext" | sed 's/^0*//')
         completed=${completed:-0}
         remaining=$((TOTAL_ITERS - completed))
@@ -72,23 +73,35 @@ do_train() {
     echo ""
 
     # shellcheck disable=SC2086
-    mlx_lm.lora \
+    PYTHONUNBUFFERED=1 "$MLX_BIN/mlx_lm.lora" \
         --model "$MODEL_DIR" \
         --data "$DATA_DIR" \
         --train \
         --batch-size 4 \
         --iters "$remaining" \
-        --lora-layers 16 \
-        --learning-rate 1e-5 \
-        --lr-schedule cosine_decay \
-        --warmup 200 \
-        --val-batches 25 \
+        --num-layers 8 \
+        --learning-rate 1e-6 \
+        --val-batches 10 \
         --steps-per-eval 500 \
         --steps-per-report 50 \
         --save-every "$SAVE_EVERY" \
         --adapter-path "$ADAPTER_DIR" \
         --grad-checkpoint \
+        --seed 6 \
         $RESUME_FLAG
+
+    # Rename only locally-named checkpoints (small numbers < completed) to global iter numbers
+    for f in "$ADAPTER_DIR"/[0-9]*_adapters.safetensors; do
+        [ -f "$f" ] || continue
+        local_iter=$(basename "$f" _adapters.safetensors | sed 's/^0*//')
+        local_iter=${local_iter:-0}
+        [ "$local_iter" -ge "$completed" ] && continue  # already globally named, skip
+        global_iter=$((completed + local_iter))
+        global_name=$(printf "%07d_adapters.safetensors" "$global_iter")
+        if [ "$(basename "$f")" != "$global_name" ]; then
+            mv "$f" "$ADAPTER_DIR/$global_name"
+        fi
+    done
 
     echo "Adapter sparad i $ADAPTER_DIR"
 }
@@ -96,7 +109,7 @@ do_train() {
 # ── 4. Slå ihop adapter med basmodell ────────────────────────────────────────
 do_fuse() {
     echo "=== Slår ihop adapter → $FUSED_DIR ==="
-    mlx_lm.fuse \
+    "$MLX_BIN/mlx_lm.fuse" \
         --model "$MODEL_DIR" \
         --adapter-path "$ADAPTER_DIR" \
         --save-path "$FUSED_DIR"
