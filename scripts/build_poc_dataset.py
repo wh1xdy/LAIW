@@ -21,6 +21,9 @@ LAWS = [
     ("brottsbalken", "brottsbalk (1962:700)", "1962:700"),
     ("regeringsformen", "kungörelse (1974:152) om beslutad ny regeringsform", "1974:152"),
     ("rättegångsbalken", "rättegångsbalk (1942:740)", "1942:740"),
+    ("miljöbalken", "miljöbalk (1998:808)", "1998:808"),
+    ("föräldrabalken", "föräldrabalk (1949:381)", "1949:381"),
+    ("skollagen", "skollag (2010:800)", "2010:800"),
 ]
 
 # Question phrasings (the {name} slot gets the common law name)
@@ -44,8 +47,8 @@ A_TEMPLATES = [
 def make_examples():
     rows = []
     for name, full, sfs in LAWS:
-        # avtalslagen is the hero example -> more coverage
-        reps = 4 if name == "avtalslagen" else 2
+        # balanced: equal coverage for every law (no single-fact dominance)
+        reps = 3
         for _ in range(reps):
             for q in Q_TEMPLATES:
                 a = random.choice(A_TEMPLATES)
