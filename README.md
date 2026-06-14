@@ -99,29 +99,6 @@ python3 scripts/download_saob.py     # ladda ner artiklar (~55 timmar)
 python3 scripts/preprocess.py --source all
 ```
 
-## Status (2026-05-23)
-
-| Dataset | Status | Dokument | Storlek |
-|---------|--------|----------|---------|
-| SFS (text) |  | 9,994 XML | 192 MB |
-| Prop (text) |  | 19,992 XML | 9.7 GB |
-| Bet (text) |  | 19,466 XML | 2.8 GB |
-| SOU (text) |  | 4,896 XML | 6.6 GB |
-| Ds (text) |  | 1,635 XML | 1 GB |
-| Prot (text) |  | 9,992 XML | 4.3 GB |
-| Mot (text) |  | 9,905 XML (10k unika dok_id) | 280 MB |
-| Fr (text) |  | 9,999 XML | 47 MB |
-| Ip (text) |  | 9,943 XML | 27 MB |
-| Dir (text) |  | 788 XML | 10 MB |
-| Yttr (text) |  | 4,588 XML | 100 MB |
-| EU (texter) |  WAF | 10,745/34,133 | 1.2 GB |
-| Domstolar |  | 16,626 avgöranden | 409 MB |
-| JO |  | 3,714 beslut | 3.9 MB |
-| SAOB artiklar |  | 75,111 artiklar, 31,723 preprocessade | 72 MB |
-| JK beslut |  JS | 10 beslut (max utan Playwright) | 0.1 MB |
-| DO beslut |  JS | 33 beslut (max utan Playwright) | 0.2 MB |
-| DI/IMY beslut |  JS | 0 beslut (fullständigt JS-renderad) | — |
-
 ## Preprocessat dataset
 
 - **~130,000 dokument, ~22 GB** (2026-05-22, merge pågår)
