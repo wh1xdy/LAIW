@@ -8,7 +8,7 @@ Hardware: Apple M5 Pro (consumer laptop, 24 GB unified memory)
 
 ## TL;DR
 
-A complete Swedish legal LLM pipeline was built and run end-to-end: a 158k-document
+A complete Swedish legal LLM pipeline was built and run end-to-end: a 132,929-document
 corpus, full preprocessing, and a LoRA fine-tuning harness on Mistral 7B Instruct.
 
 **The method works.** A clean, focused micro-fine-tune (below) corrects the base
@@ -58,7 +58,7 @@ demonstrated in ~5 minutes on a laptop:
 > andra rättshandlingar på förmögenhetsrättens område)."
 
 The implication: with stable compute, the same approach scales from 4 facts to the
-full 158k-document corpus.
+full 132,929-document open corpus.
 
 ### Reproducibility (run it yourself)
 
@@ -104,9 +104,9 @@ Every taught SFS number was verified against the official statute book at riksda
 
 | Asset | Status |
 |---|---|
-| Corpus: 158,090 docs / 9.9 GB across 17 Swedish & EU legal sources (SFS, propositions, SOU, Ds, case law, EUR-Lex, …) | ✓ Done |
+| Corpus: 132,929 docs / ~9.9 GB across 16 open Swedish & EU legal sources (SFS, propositions, SOU, Ds, case law, EUR-Lex, …) | ✓ Done |
 | Preprocessing pipeline (HTML/PDF extraction, dedup, soft-404 & nav-junk filtering, page-marker stripping) | ✓ Done |
-| Train/val/test split (154,930 train docs) | ✓ Done |
+| Train/val/test split (98/1/1 of the open corpus) | ✓ Done |
 | LoRA training harness (MLX-LM, pausable/resumable, watchdog, NaN insurance) | ✓ Done |
 | Fuse + inference tooling | ✓ Done |
 
