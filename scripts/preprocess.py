@@ -67,8 +67,8 @@ def clean_text(t: str) -> str:
     return t.strip()
 
 def clean_prot(t: str) -> str:
-    """Extra rensning för protokoll: ta bort OCR-brus (falska vinkelparentes-fragment)."""
-    # Tar bort mönster som <blah !}blah> som är OCR-artefakter, ej riktig HTML
+    """Extra cleanup for court records: strip OCR noise (fake angle-bracket fragments)."""
+    # Strip <blah !}blah>-style junk (OCR artifacts, not real HTML)
     t = re.sub(r'<[^<>\n]{1,60}>', ' ', t)
     return clean_text(t)
 
@@ -136,7 +136,7 @@ def process_domstol():
     out = OUT_DIR / "domstol.jsonl"
     ok = skip = err = 0; t0 = time.time()
     with open(out, "w", encoding="utf-8") as f:
-        # Vägledande – fulltext HTML
+        # Guidance documents: full-text HTML
         vag = RAW / "domstolar" / "vagledande_all.json"
         if vag.exists():
             cases = json.load(open(vag))
@@ -154,7 +154,7 @@ def process_domstol():
                         ensure_ascii=False) + "\n")
                     ok += 1
                 except: err += 1
-        # Övriga – sammanfattning
+        # Everything else: summary only
         ovr = RAW / "domstolar" / "ovriga_all.json"
         if ovr.exists():
             cases = json.load(open(ovr))

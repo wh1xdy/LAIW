@@ -35,7 +35,7 @@ PAGE_SIZE  = 10   # API returnerar max 10 per sida
 SLEEP_SEC  = 0.8
 MAX_RETRIES = 4
 
-# Domstolar vi vill ha (alla vägledande, oavsett domstol)
+# Courts we want (all precedent-setting, any court)
 TARGET_COURTS = ["HDO", "HFD", "AD", "MMOD", "HOR", "KamR"]  # tom = alla
 
 def setup_logging():
@@ -111,7 +111,7 @@ def download_all(skip_pdfs: bool = False):
     vagledande = []
     ovriga = []
 
-    # Läs in befintliga filer om de finns
+    # Load existing files if present
     vag_file = OUT_DIR / "vagledande_all.json"
     ovr_file = OUT_DIR / "ovriga_all.json"
     if vag_file.exists() and start_page > 1:
@@ -121,7 +121,7 @@ def download_all(skip_pdfs: bool = False):
         ovriga = json.loads(ovr_file.read_text())
         logging.info(f"  Loaded {len(ovriga):,} existing övriga")
 
-    # Proba första sidan för total count
+    # Probe the first page for the total count
     probe = post_sok(1, size=PAGE_SIZE)
     if probe:
         total_count = probe.get("_total_count", 0)
@@ -153,7 +153,7 @@ def download_all(skip_pdfs: bool = False):
 
         for pub in pubs:
             is_vag = pub.get("arVagledande", False)
-            # Samla PDF-lagringID:n för övriga
+            # Collect PDF storage IDs for the rest
             if not is_vag:
                 for bil in pub.get("bilagaLista", []):
                     fid = bil.get("fillagringId", "")

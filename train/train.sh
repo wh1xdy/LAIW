@@ -1,15 +1,14 @@
 #!/bin/bash
-# LAIW — LoRA fine-tuning av Mistral 7B Instruct med MLX-LM
+# LoRA fine-tuning of Mistral 7B Instruct with MLX-LM.
 #
-# Kör stegen i ordning:
-#   1. pip install mlx-lm          (en gång)
-#   2. bash train/train.sh convert  → laddar ner + konverterar modellen
-#   3. bash train/train.sh prep     → gör train/valid/test-split
-#   4. bash train/train.sh train    → startar träning — pausa när som helst med Ctrl+C
-#                                     kör igen för att återuppta automatiskt
-#   5. bash train/train.sh fuse     → slår ihop adapter med basmodell
+# Steps, in order:
+#   1. pip install mlx-lm        (once)
+#   2. bash train/train.sh convert   download + convert the model
+#   3. bash train/train.sh prep      build the train/valid/test split
+#   4. bash train/train.sh train     start training (Ctrl+C to pause; rerun to resume)
+#   5. bash train/train.sh fuse      merge the adapter into the base model
 #
-# Utan argument körs alla steg i följd.
+# With no argument, runs every step in sequence.
 
 set -e
 cd "$(dirname "$0")/.."
@@ -22,54 +21,54 @@ FUSED_DIR="models/laiw-mistral-7b"
 DATA_DIR="data/train"
 
 TOTAL_ITERS=10000
-SAVE_EVERY=250   # sparar checkpoint var 250:e iter (~15 min på M5 Pro)
+SAVE_EVERY=250   # a checkpoint every 250 iters (~15 min on the M5 Pro)
 
-# ── 1. Konvertera HF-modell → MLX 4-bit ──────────────────────────────────────
+# 1. Convert the HF model to MLX 4-bit
 do_convert() {
-    echo "=== Konverterar $MODEL_HF → $MODEL_DIR (4-bit) ==="
+    echo "=== Converting $MODEL_HF -> $MODEL_DIR (4-bit) ==="
     "$MLX_BIN/mlx_lm.convert" \
         --hf-path "$MODEL_HF" \
         --mlx-path "$MODEL_DIR" \
         --quantize \
         --q-bits 4
-    echo "Modell sparad i $MODEL_DIR"
+    echo "Model saved to $MODEL_DIR"
 }
 
-# ── 2. Förbered träningsdata ──────────────────────────────────────────────────
+# 2. Build the training data
 do_prep() {
-    echo "=== Förbereder träningsdata ==="
+    echo "=== Preparing training data ==="
     python3 scripts/prepare_training_data.py
 }
 
-# ── 3. LoRA-träning (pausbar/återupptagbar) ───────────────────────────────────
+# 3. LoRA training (pause/resume with Ctrl+C)
 do_train() {
     mkdir -p "$ADAPTER_DIR"
 
-    # Hitta senaste checkpoint: filer heter t.ex. 0002500_adapters.safetensors
+    # Latest checkpoint, e.g. 0002500_adapters.safetensors
     latest=$(ls "$ADAPTER_DIR"/*_adapters.safetensors 2>/dev/null | sort | tail -1 || true)
 
     if [ -n "$latest" ]; then
-        # Extrahera antal genomförda iters från filnamnet
+        # Pull the completed-iter count out of the filename
         basename_no_ext=$(basename "$latest" _adapters.safetensors)
         completed=$(echo "$basename_no_ext" | sed 's/^0*//')
         completed=${completed:-0}
         remaining=$((TOTAL_ITERS - completed))
 
         if [ "$remaining" -le 0 ]; then
-            echo "=== Träning klar! ($completed/$TOTAL_ITERS iters) ==="
-            echo "Kör 'bash train/train.sh fuse' för att bygga den färdiga modellen."
+            echo "=== Done! ($completed/$TOTAL_ITERS iters) ==="
+            echo "Run 'bash train/train.sh fuse' to build the final model."
             return
         fi
 
-        echo "=== Återupptar träning från iter $completed — $remaining iters kvar av $TOTAL_ITERS ==="
+        echo "=== Resuming from iter $completed — $remaining of $TOTAL_ITERS left ==="
         RESUME_FLAG="--resume-adapter-file $latest"
     else
         remaining=$TOTAL_ITERS
         RESUME_FLAG=""
-        echo "=== Startar ny träning — $TOTAL_ITERS iters totalt ==="
+        echo "=== Starting fresh — $TOTAL_ITERS iters total ==="
     fi
 
-    echo "    Pausa när som helst med Ctrl+C. Kör samma kommando igen för att återuppta."
+    echo "    Ctrl+C to pause. Rerun the same command to resume."
     echo ""
 
     # shellcheck disable=SC2086
@@ -90,12 +89,13 @@ do_train() {
         --seed 6 \
         $RESUME_FLAG
 
-    # Rename only locally-named checkpoints (small numbers < completed) to global iter numbers
+    # MLX names checkpoints by local iter on resume; renumber them to global iters
+    # so the "latest checkpoint" logic above keeps working across restarts.
     for f in "$ADAPTER_DIR"/[0-9]*_adapters.safetensors; do
         [ -f "$f" ] || continue
         local_iter=$(basename "$f" _adapters.safetensors | sed 's/^0*//')
         local_iter=${local_iter:-0}
-        [ "$local_iter" -ge "$completed" ] && continue  # already globally named, skip
+        [ "$local_iter" -ge "$completed" ] && continue  # already global, leave it
         global_iter=$((completed + local_iter))
         global_name=$(printf "%07d_adapters.safetensors" "$global_iter")
         if [ "$(basename "$f")" != "$global_name" ]; then
@@ -103,22 +103,21 @@ do_train() {
         fi
     done
 
-    echo "Adapter sparad i $ADAPTER_DIR"
+    echo "Adapter saved to $ADAPTER_DIR"
 }
 
-# ── 4. Slå ihop adapter med basmodell ────────────────────────────────────────
+# 4. Merge the adapter into the base model
 do_fuse() {
-    echo "=== Slår ihop adapter → $FUSED_DIR ==="
+    echo "=== Fusing adapter -> $FUSED_DIR ==="
     "$MLX_BIN/mlx_lm.fuse" \
         --model "$MODEL_DIR" \
         --adapter-path "$ADAPTER_DIR" \
         --save-path "$FUSED_DIR"
-    echo "Färdig modell sparad i $FUSED_DIR"
+    echo "Final model saved to $FUSED_DIR"
     echo ""
-    echo "Kör: mlx_lm.generate --model $FUSED_DIR --prompt 'Vad säger avtalslagen om anbud?'"
+    echo "Try: mlx_lm.generate --model $FUSED_DIR --prompt 'Vad säger avtalslagen om anbud?'"
 }
 
-# ── dispatch ──────────────────────────────────────────────────────────────────
 case "${1:-all}" in
     convert) do_convert ;;
     prep)    do_prep ;;
@@ -131,7 +130,7 @@ case "${1:-all}" in
         do_fuse
         ;;
     *)
-        echo "Användning: $0 [convert|prep|train|fuse|all]"
+        echo "Usage: $0 [convert|prep|train|fuse|all]"
         exit 1
         ;;
 esac
