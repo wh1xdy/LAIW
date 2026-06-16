@@ -32,3 +32,7 @@ build/
 .env
 *.key
 *.secret
+
+# SAOB scraper kept local only (copyright — see README)
+scripts/download_saob.py
+scripts/saob_deep_index.py
