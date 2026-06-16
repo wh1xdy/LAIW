@@ -41,10 +41,10 @@ DOC_TYPES = {
     "ds":   "ds_all.json",
     "prot": "prot_all.json",
     "mot":  "mot_all.json",   # Motioner (257k docs)
-    "fr":   "fr_all.json",    # Skriftliga frågor (44k docs)
+    "fr":   "fr_all.json",    # Written questions (44k docs)
     "ip":   "ip_all.json",    # Interpellationer (15k docs)
     "dir":  "dir_all.json",   # Kommittédirektiv (6k docs)
-    "yttr": "yttr_all.json",  # Yttranden/utlåtanden (4.6k docs)
+    "yttr": "yttr_all.json",  # Opinions (4.6k docs)
 }
 
 # ─── LOGGING ──────────────────────────────────────────────────────────────────
@@ -170,7 +170,7 @@ def download_doctype(doctype: str, force_restart: bool = False):
         logging.error("  Could not reach API. Aborting.")
         return
     total_docs = int(first.get("dokumentlista", {}).get("@traffar", 0))
-    # Använd faktiskt antal returnerade per sida (API kan ignorera sz)
+    # Use the actual per-page count returned (API may ignore sz)
     first_docs = extract_docs(first)
     actual_page_size = len(first_docs) if first_docs else PAGE_SIZE
     if actual_page_size < 1:
