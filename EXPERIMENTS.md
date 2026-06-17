@@ -100,12 +100,6 @@ enforced by an external service — which is why it works fully offline, and why
 fine-tuning can move it. Same mechanism as everything above: learned disposition
 distributed across parameters, not hard-coded rules.
 
-## 8. Aside: that "40 GB" memory figure is mmap
-
-`llama-server` showing ~40 GB in Activity Monitor on a 24 GB machine is impossible as
-real RAM. llama.cpp **memory-maps** the GGUF weights; those file-backed pages count in
-the per-process "Memory" column but create little real memory pressure (they page from
-disk on demand). Check the Memory Pressure graph, not the per-process number.
 
 ---
 
